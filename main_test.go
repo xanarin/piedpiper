@@ -70,7 +70,7 @@ func TestGetPutGetDatabase(t *testing.T) {
 
 func TestCreateUser(t *testing.T) {
 	// Create a request to pass to our handler.
-	createUserJSON := CreateUserRequestJSON{Username: "testguy"}
+	createUserJSON := UserRequestJSON{Username: "testguy"}
 	buffer, err := json.Marshal(createUserJSON)
 	req, err := http.NewRequest("POST", "/user", bytes.NewBuffer(buffer))
 	if err != nil {
@@ -94,7 +94,7 @@ func TestCreateUser(t *testing.T) {
 
 func TestCreateConflictingUser(t *testing.T) {
 	// Create a request to pass to our handler.
-	createUserJSON := CreateUserRequestJSON{Username: "hacker1"}
+	createUserJSON := UserRequestJSON{Username: "hacker1"}
 	buffer, err := json.Marshal(createUserJSON)
 	req, err := http.NewRequest("POST", "/user", bytes.NewBuffer(buffer))
 	if err != nil {
@@ -128,7 +128,60 @@ func TestCreateConflictingUser(t *testing.T) {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusConflict)
 	}
+}
 
+func TestCreateDeleteUser(t *testing.T) {
+	// Create a request to pass to our handler.
+	createUserJSON := UserRequestJSON{Username: "forgettable"}
+	buffer, err := json.Marshal(createUserJSON)
+	req, err := http.NewRequest("POST", "/user", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+	createHandler := http.HandlerFunc(createUserHandler)
+	createHandler.ServeHTTP(rr, req)
+
+	// Check the status code is what we expect.
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	// Make delete request
+	req, err = http.NewRequest("DELETE", "/user", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deleteHandler := http.HandlerFunc(deleteUserHandler)
+	deleteHandler.ServeHTTP(rr, req)
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v.",
+			status, http.StatusOK)
+	}
+}
+
+func TestDeleteFictionalUser(t *testing.T) {
+	// Create a request to pass to our handler.
+	createUserJSON := UserRequestJSON{Username: "fictional"}
+	buffer, err := json.Marshal(createUserJSON)
+
+	// Make delete request
+	req, err := http.NewRequest("DELETE", "/user", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+	deleteHandler := http.HandlerFunc(deleteUserHandler)
+	deleteHandler.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusNotFound {
+		t.Errorf("handler returned wrong status code: got %v want %v.",
+			status, http.StatusNotFound)
+	}
 }
 
 func TestMain(m *testing.M) {

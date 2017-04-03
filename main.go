@@ -28,7 +28,7 @@ type CreateObjectRequestJSON struct {
 	FileSize int64  `json: "filesize"`
 }
 
-type CreateUserRequestJSON struct {
+type UserRequestJSON struct {
 	Username string `json: "username"`
 }
 
@@ -116,7 +116,7 @@ func deleteObjectHandler(res http.ResponseWriter, req *http.Request) {
 }
 
 func createUserHandler(res http.ResponseWriter, req *http.Request) {
-	requestJSON := CreateUserRequestJSON{}
+	requestJSON := UserRequestJSON{}
 
 	err := json.NewDecoder(req.Body).Decode(&requestJSON)
 	if err != nil {
@@ -136,7 +136,6 @@ func createUserHandler(res http.ResponseWriter, req *http.Request) {
 	if existingObject != nil {
 		res.WriteHeader(http.StatusConflict)
 		fmt.Fprintf(res, "That username already exists")
-		log.Printf("Error creating new user in database. Username %v already exists.", requestJSON.Username)
 		return
 	}
 
@@ -167,7 +166,45 @@ func createUserHandler(res http.ResponseWriter, req *http.Request) {
 }
 
 func deleteUserHandler(res http.ResponseWriter, req *http.Request) {
+	requestJSON := UserRequestJSON{}
 
+	err := json.NewDecoder(req.Body).Decode(&requestJSON)
+	if err != nil {
+		fmt.Fprintf(res, "Error in decoding message")
+		res.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	var existingObject []byte
+	requestedKey := []byte(requestJSON.Username)
+	mainDB.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("users"))
+		existingObject = b.Get(requestedKey)
+		return nil
+	})
+
+	if existingObject == nil {
+		res.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(res, "That username does not exist")
+		return
+	}
+
+	err = mainDB.Update(func(tx *bolt.Tx) error {
+		// Retrieve the objects bucket.
+		// This should be created when the DB is first opened.
+		b := tx.Bucket([]byte("users"))
+
+		// Persist bytes to users bucket.
+		return b.Delete(requestedKey)
+	})
+
+	if err != nil {
+		log.Printf("Error deleting user in database. %v ", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// we're home free!
 }
 
 func main() {
@@ -186,8 +223,8 @@ func main() {
 	mainRouter.HandleFunc("/object", uploadObjectHandler).Methods("PUT")
 	mainRouter.HandleFunc("/object", deleteObjectHandler).Methods("DELETE")
 	// User Actions
-	mainRouter.HandleFunc("/user", createUserHandler).Methods("POST")
 	mainRouter.HandleFunc("/user", deleteUserHandler).Methods("DELETE")
+	mainRouter.HandleFunc("/user", createUserHandler).Methods("POST")
 
 	// Open Database Connection
 	var err error
