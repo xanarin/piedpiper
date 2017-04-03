@@ -24,7 +24,6 @@ type ErrorResponse struct {
 type CreateObjectRequestJSON struct {
 	Username string `json: "username"`
 	FileName string `json: "filename"`
-	FilePath string `json: "filepath"`
 	FileSize int64  `json: "filesize"`
 }
 
@@ -40,7 +39,6 @@ type User struct {
 type Object struct {
 	ID       int    `json: "id"`
 	Name     string `json: "name"`
-	FilePath string `json: "filepath"`
 	FileSize int64  `json: "filesize"`
 	Owner    string `json: "owner"`
 }
@@ -99,7 +97,6 @@ func createObjectHandler(res http.ResponseWriter, req *http.Request) {
 	// Create new object in database
 	newObject := Object{
 		Name:     requestJSON.FileName,
-		FilePath: requestJSON.FilePath,
 		FileSize: requestJSON.FileSize,
 		Owner:    requestJSON.Username,
 	}
