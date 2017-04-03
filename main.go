@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/boltdb/bolt"
@@ -20,11 +21,28 @@ type ErrorResponse struct {
 	Description string `json: "description"`
 }
 
+type CreateObjectRequestJSON struct {
+	UserID   int    `json: "userid"`
+	FileName string `json: "filename"`
+	FilePath string `json: "filepath"`
+	FileSize int64  `json: "filesize"`
+}
+
+type CreateUserRequestJSON struct {
+	Username string `json: "username"`
+}
+
+type User struct {
+	Username  string `json: "username"`
+	ObjectIDs []int  `json: "objectids"`
+}
+
 type Object struct {
 	ID       int    `json: "id"`
 	Name     string `json: "name"`
 	FilePath string `json: "filepath"`
 	FileSize int64  `json: "filesize"`
+	UserID   int    `json: "userid"`
 }
 
 // itob returns an 8-byte big endian representation of v.
@@ -34,19 +52,19 @@ func itob(v int) []byte {
 	return b
 }
 
-func putObject(entry *Object, db *bolt.DB) error {
-	return db.Update(func(tx *bolt.Tx) error {
+func putObject(entry *Object) error {
+	return mainDB.Update(func(tx *bolt.Tx) error {
 		// Retrieve the objects bucket.
 		// This should be created when the DB is first opened.
 		b := tx.Bucket([]byte("objects"))
 
-		// Generate ID for the user.
+		// Generate ID for the object.
 		// This returns an error only if the Tx is closed or not writeable.
 		// That can't happen in an Update() call so I ignore the error check.
 		id, _ := b.NextSequence()
 		entry.ID = int(id)
 
-		// Marshal user data into bytes.
+		// Marshal Object into bytes.
 		buf, err := json.Marshal(entry)
 		if err != nil {
 			return err
@@ -57,8 +75,8 @@ func putObject(entry *Object, db *bolt.DB) error {
 	})
 }
 
-func getObject(entryID int, returnObject *Object, db *bolt.DB) error {
-	return db.View(func(tx *bolt.Tx) error {
+func getObject(entryID int, returnObject *Object) error {
+	return mainDB.View(func(tx *bolt.Tx) error {
 		// Get reference to objects bucket
 		bucket := tx.Bucket([]byte("objects"))
 
@@ -78,7 +96,18 @@ func getObjectHandler(res http.ResponseWriter, req *http.Request) {
 
 }
 
-func putObjectHandler(res http.ResponseWriter, req *http.Request) {
+func createObjectHandler(res http.ResponseWriter, req *http.Request) {
+	userRequestJSON := CreateObjectRequestJSON{}
+	err := json.NewDecoder(req.Body).Decode(&userRequestJSON)
+	if err != nil {
+		fmt.Fprintf(res, "Error in decoding message")
+		res.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+}
+
+func uploadObjectHandler(res http.ResponseWriter, req *http.Request) {
 
 }
 
@@ -86,16 +115,63 @@ func deleteObjectHandler(res http.ResponseWriter, req *http.Request) {
 
 }
 
-func arrayContains(element string, array []string) bool {
-	for _, v := range array {
-		if v == element {
-			return true
-		}
+func createUserHandler(res http.ResponseWriter, req *http.Request) {
+	requestJSON := CreateUserRequestJSON{}
+
+	err := json.NewDecoder(req.Body).Decode(&requestJSON)
+	if err != nil {
+		fmt.Fprintf(res, "Error in decoding message")
+		res.WriteHeader(http.StatusBadRequest)
+		return
 	}
-	return false
+
+	var existingObject []byte
+	requestedKey := []byte(requestJSON.Username)
+	mainDB.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("users"))
+		existingObject = b.Get(requestedKey)
+		return nil
+	})
+
+	if existingObject != nil {
+		res.WriteHeader(http.StatusConflict)
+		fmt.Fprintf(res, "That username already exists")
+		log.Printf("Error creating new user in database. Username %v already exists.", requestJSON.Username)
+		return
+	}
+
+	userObject := User{Username: requestJSON.Username, ObjectIDs: []int{}}
+
+	err = mainDB.Update(func(tx *bolt.Tx) error {
+		// Retrieve the objects bucket.
+		// This should be created when the DB is first opened.
+		b := tx.Bucket([]byte("users"))
+
+		// Marshal Object into bytes.
+		buf, err := json.Marshal(userObject)
+		if err != nil {
+			return err
+		}
+
+		// Persist bytes to users bucket.
+		return b.Put([]byte(userObject.Username), buf)
+	})
+
+	if err != nil {
+		log.Printf("Error creating new user in database %v ", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// we're home free!
+}
+
+func deleteUserHandler(res http.ResponseWriter, req *http.Request) {
+
 }
 
 func main() {
+	log.SetOutput(os.Stderr)
 	log.Println("Initializing server...")
 
 	// These are set up in code for now, but will eventually be CLI params
@@ -106,9 +182,12 @@ func main() {
 	mainRouter := mux.NewRouter()
 	// Object Actions
 	mainRouter.HandleFunc("/object", getObjectHandler).Methods("GET")
-	mainRouter.HandleFunc("/object", putObjectHandler).Methods("PUT")
-	mainRouter.HandleFunc("/object", putObjectHandler).Methods("POST")
+	mainRouter.HandleFunc("/object", createObjectHandler).Methods("POST")
+	mainRouter.HandleFunc("/object", uploadObjectHandler).Methods("PUT")
 	mainRouter.HandleFunc("/object", deleteObjectHandler).Methods("DELETE")
+	// User Actions
+	mainRouter.HandleFunc("/user", createUserHandler).Methods("POST")
+	mainRouter.HandleFunc("/user", deleteUserHandler).Methods("DELETE")
 
 	// Open Database Connection
 	var err error
@@ -122,6 +201,13 @@ func main() {
 	// Instantiate buckets if they don't exist
 	mainDB.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte("objects"))
+		if err != nil {
+			return fmt.Errorf("Error creating bucket: %s", err)
+		}
+		return nil
+	})
+	mainDB.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("users"))
 		if err != nil {
 			return fmt.Errorf("Error creating bucket: %s", err)
 		}
