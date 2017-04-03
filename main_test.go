@@ -3,41 +3,18 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
-	"time"
-
-	"github.com/boltdb/bolt"
 )
 
 func setup() {
-	// Open Database Connection
-	var err error
-	// Open database, with a 1 second timeout in case something goes wrong
-	mainDB, err = bolt.Open("test.db", 0600, &bolt.Options{Timeout: 1 * time.Second})
+	err := initDB("test.db")
 	if err != nil {
-		log.Fatal(err)
+		log.Panicf("Database initialization failed with error %v", err)
 	}
-
-	// Instantiate buckets if they don't exist
-	mainDB.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte("objects"))
-		if err != nil {
-			return fmt.Errorf("Error creating bucket: %s", err)
-		}
-		return nil
-	})
-	mainDB.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte("users"))
-		if err != nil {
-			return fmt.Errorf("Error creating bucket: %s", err)
-		}
-		return nil
-	})
 }
 
 func shutdown() {

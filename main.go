@@ -208,6 +208,8 @@ func createObjectHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Send back user an upload code
+
 }
 
 func uploadObjectHandler(res http.ResponseWriter, req *http.Request) {
@@ -261,6 +263,7 @@ func createUserHandler(res http.ResponseWriter, req *http.Request) {
 
 	if err != nil {
 		res.WriteHeader(http.StatusInternalServerError)
+		log.Printf("Database insert of user %v failed with error %v", requestJSON.Username, err)
 		return
 	}
 
@@ -309,6 +312,52 @@ func deleteUserHandler(res http.ResponseWriter, req *http.Request) {
 	// we're home free!
 }
 
+func initDB(dbfile string) error {
+	// Open Database Connection
+	var err error
+	// Open database, with a 1 second timeout in case something goes wrong
+	mainDB, err = bolt.Open(dbfile, 0600, &bolt.Options{Timeout: 1 * time.Second})
+	if err != nil {
+		return err
+	}
+
+	// Instantiate buckets if they don't exist
+	err = mainDB.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("objects"))
+		if err != nil {
+			return fmt.Errorf("Error creating bucket: %s", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	err = mainDB.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("users"))
+		if err != nil {
+			return fmt.Errorf("Error creating bucket: %s", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	err = mainDB.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("uploads"))
+		if err != nil {
+			return fmt.Errorf("Error creating bucket: %s", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func main() {
 	log.SetOutput(os.Stderr)
 	log.Println("Initializing server...")
@@ -328,30 +377,12 @@ func main() {
 	mainRouter.HandleFunc("/user", deleteUserHandler).Methods("DELETE")
 	mainRouter.HandleFunc("/user", createUserHandler).Methods("POST")
 
-	// Open Database Connection
-	var err error
-	// Open database, with a 1 second timeout in case something goes wrong
-	mainDB, err = bolt.Open(dbfile, 0600, &bolt.Options{Timeout: 1 * time.Second})
-	if err != nil {
-		log.Fatal(err)
-	}
+	// Initialize database
+	err := initDB(dbfile)
 	defer mainDB.Close()
-
-	// Instantiate buckets if they don't exist
-	mainDB.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte("objects"))
-		if err != nil {
-			return fmt.Errorf("Error creating bucket: %s", err)
-		}
-		return nil
-	})
-	mainDB.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte("users"))
-		if err != nil {
-			return fmt.Errorf("Error creating bucket: %s", err)
-		}
-		return nil
-	})
+	if err != nil {
+		log.Printf("Database initialization failed with error %v", err)
+	}
 
 	// Kick off Server
 	log.Printf("Server Initialized. Listening on %v", addr)
