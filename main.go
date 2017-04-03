@@ -100,7 +100,7 @@ func main() {
 
 	// These are set up in code for now, but will eventually be CLI params
 	addr := ":8080"
-	dbfile := "test.db"
+	dbfile := "prod.db"
 
 	// Set up HTTP Handling
 	mainRouter := mux.NewRouter()
