@@ -57,24 +57,70 @@ func itob(v int) []byte {
 	return b
 }
 
-func getObject(entryID int, returnObject *Object) error {
-	return mainDB.View(func(tx *bolt.Tx) error {
-		// Get reference to objects bucket
-		bucket := tx.Bucket([]byte("objects"))
+func getObjectHandler(res http.ResponseWriter, req *http.Request) {
+	requestJSON := GetObjectRequestJSON{}
+	err := json.NewDecoder(req.Body).Decode(&requestJSON)
+	if err != nil {
+		res.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(res, "Error in decoding message")
+		return
+	}
 
-		// Get value from k,v pair
-		value := bucket.Get(itob(entryID))
+	// Confirm that owner exists
+	var userData []byte
+	requestedKey := []byte(requestJSON.Username)
+	mainDB.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("users"))
+		userData = b.Get(requestedKey)
+		return nil
+	})
+	if userData == nil {
+		res.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(res, "User %v is not a registered user", requestJSON.Username)
+		return
+	}
 
-		// Demarshall data back from v in database, place into returnObject
-		err := json.Unmarshal(value, returnObject)
-		if err != nil {
-			return err
+	ownerObject := User{}
+	err = json.Unmarshal(userData, &ownerObject)
+	if err != nil {
+		res.WriteHeader(http.StatusInternalServerError)
+		log.Printf("Error unmarshalling owner object from database. %v", err)
+		return
+	}
+
+	// Get object from database (using owner's own index)
+	var finalObject *Object
+	err = mainDB.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("objects"))
+		for _, v := range ownerObject.ObjectIDs {
+			object := Object{}
+			objectData := b.Get(itob(v))
+			err := json.Unmarshal(objectData, &object)
+			if err != nil {
+				return err
+			}
+
+			if object.Name == requestJSON.FileName {
+				finalObject = &object
+				return nil
+			}
 		}
 		return nil
 	})
-}
 
-func getObjectHandler(res http.ResponseWriter, req *http.Request) {
+	if err != nil {
+		res.WriteHeader(http.StatusInternalServerError)
+		log.Printf("Error retrieving object from database where owner is known. %v", err)
+		return
+	}
+
+	if finalObject == nil {
+		res.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(res, "Failed to find object with filename %v belonging to user %v", requestJSON.FileName, requestJSON.Username)
+		return
+	}
+
+	// Read object back to user
 
 }
 
@@ -82,8 +128,8 @@ func createObjectHandler(res http.ResponseWriter, req *http.Request) {
 	requestJSON := CreateObjectRequestJSON{}
 	err := json.NewDecoder(req.Body).Decode(&requestJSON)
 	if err != nil {
-		fmt.Fprintf(res, "Error in decoding message")
 		res.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(res, "Error in decoding message")
 		return
 	}
 
@@ -177,8 +223,8 @@ func createUserHandler(res http.ResponseWriter, req *http.Request) {
 
 	err := json.NewDecoder(req.Body).Decode(&requestJSON)
 	if err != nil {
-		fmt.Fprintf(res, "Error in decoding message")
 		res.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(res, "Error in decoding message")
 		return
 	}
 
@@ -226,8 +272,8 @@ func deleteUserHandler(res http.ResponseWriter, req *http.Request) {
 
 	err := json.NewDecoder(req.Body).Decode(&requestJSON)
 	if err != nil {
-		fmt.Fprintf(res, "Error in decoding message")
 		res.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(res, "Error in decoding message")
 		return
 	}
 

@@ -107,7 +107,7 @@ func TestCreateConflictingUser(t *testing.T) {
 	}
 }
 
-func TestCreateDeleteUser(t *testing.T) {
+func TestDeleteUser(t *testing.T) {
 	// Create a request to pass to our handler.
 	createUserJSON := UserRequestJSON{Username: "forgettable"}
 	buffer, err := json.Marshal(createUserJSON)
@@ -228,6 +228,162 @@ func TestCreateObjectInvalidOwner(t *testing.T) {
 	if status := rr.Code; status != http.StatusNotFound {
 		t.Errorf("user creator handler returned wrong status code: got %v want %v",
 			status, http.StatusNotFound)
+	}
+}
+
+func TestCreateGetObjectValid(t *testing.T) {
+	// Create user for this test
+	createUserJSON := UserRequestJSON{Username: "SetGetGuy"}
+	buffer, err := json.Marshal(createUserJSON)
+	req, err := http.NewRequest("POST", "/user", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(createUserHandler)
+	handler.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("user creator handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	// Create a new object in the database
+	createObjectJSON := CreateObjectRequestJSON{Username: "SetGetGuy", FileName: "rando239487246char.txt", FileSize: 20}
+	buffer, err = json.Marshal(createObjectJSON)
+	req, err = http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr = httptest.NewRecorder()
+	createObjectRunner := http.HandlerFunc(createObjectHandler)
+	createObjectRunner.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("user creator handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	// Get object back from database
+	getObjectJSON := GetObjectRequestJSON{Username: "SetGetGuy", FileName: "rando239487246char.txt"}
+	buffer, err = json.Marshal(getObjectJSON)
+	req, err = http.NewRequest("GET", "/object", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr = httptest.NewRecorder()
+	getObjectRunner := http.HandlerFunc(getObjectHandler)
+	getObjectRunner.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("user creator handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+}
+
+func TestCreateGetObjectBadOwner(t *testing.T) {
+	// Create user for this test
+	createUserJSON := UserRequestJSON{Username: "BadOwner1"}
+	buffer, err := json.Marshal(createUserJSON)
+	req, err := http.NewRequest("POST", "/user", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(createUserHandler)
+	handler.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("user creator handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	// Create a new object in the database
+	createObjectJSON := CreateObjectRequestJSON{Username: "BadOwner1", FileName: "rando239487246char.txt", FileSize: 20}
+	buffer, err = json.Marshal(createObjectJSON)
+	req, err = http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr = httptest.NewRecorder()
+	createObjectRunner := http.HandlerFunc(createObjectHandler)
+	createObjectRunner.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("user creator handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	// Get object back from database (but we're requesting from a user that doesn't exist)
+	getObjectJSON := GetObjectRequestJSON{Username: "BadOwnerInvalid", FileName: "rando239487246char.txt"}
+	buffer, err = json.Marshal(getObjectJSON)
+	req, err = http.NewRequest("GET", "/object", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr = httptest.NewRecorder()
+	getObjectRunner := http.HandlerFunc(getObjectHandler)
+	getObjectRunner.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusNotFound {
+		t.Errorf("user creator handler returned wrong status code: got %v want %v",
+			status, http.StatusNotFound)
+	}
+
+	// Check the response body is what we expect.
+	expected := `User BadOwnerInvalid is not a registered user`
+	if rr.Body.String() != expected {
+		t.Errorf("handler returned unexpected body: got %v want %v",
+			rr.Body.String(), expected)
+	}
+}
+
+func TestCreateGetObjectBadFileName(t *testing.T) {
+	// Create user for this test
+	createUserJSON := UserRequestJSON{Username: "BadOwner2"}
+	buffer, err := json.Marshal(createUserJSON)
+	req, err := http.NewRequest("POST", "/user", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(createUserHandler)
+	handler.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("user creator handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	// Get object back from database (but we're requesting an object that doesn't exist)
+	getObjectJSON := GetObjectRequestJSON{Username: "BadOwner2", FileName: "11.txt"}
+	buffer, err = json.Marshal(getObjectJSON)
+	req, err = http.NewRequest("GET", "/object", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr = httptest.NewRecorder()
+	getObjectRunner := http.HandlerFunc(getObjectHandler)
+	getObjectRunner.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusNotFound {
+		t.Errorf("user creator handler returned wrong status code: got %v want %v",
+			status, http.StatusNotFound)
+	}
+
+	// Check the response body is what we expect.
+	expected := `Failed to find object with filename 11.txt belonging to user BadOwner2`
+	if rr.Body.String() != expected {
+		t.Errorf("handler returned unexpected body: got %v want %v",
+			rr.Body.String(), expected)
 	}
 }
 
