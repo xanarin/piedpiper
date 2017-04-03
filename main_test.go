@@ -45,29 +45,6 @@ func shutdown() {
 	os.Remove("test.db")
 }
 
-func TestGetPutGetDatabase(t *testing.T) {
-	testObject := Object{Name: "testObject", FilePath: "/tmp/testObject1", FileSize: 64000}
-
-	// Put object in database
-	err := putObject(&testObject)
-	if err != nil {
-		t.Errorf("Failed to store testObject in collection. error: %v", err)
-	}
-	id := testObject.ID
-
-	// Get object back from database
-	returnObject := Object{}
-	err = getObject(id, &returnObject)
-	if err != nil {
-		t.Errorf("Retrieve object operation failed. Error: %v", err)
-	}
-
-	// Test validity of object
-	if returnObject.Name != "testObject" || returnObject.FilePath != "/tmp/testObject1" || returnObject.FileSize != 64000 {
-		t.Errorf("Object returned from database does not match inserted object.\n\tExpected: %v \n\tActual: %v", testObject, returnObject)
-	}
-}
-
 func TestCreateUser(t *testing.T) {
 	// Create a request to pass to our handler.
 	createUserJSON := UserRequestJSON{Username: "testguy"}
@@ -183,6 +160,12 @@ func TestDeleteFictionalUser(t *testing.T) {
 			status, http.StatusNotFound)
 	}
 }
+
+/*
+TODO:
+	- Test createObject
+		- Test owner not registered
+*/
 
 func TestMain(m *testing.M) {
 	setup()

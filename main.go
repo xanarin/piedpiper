@@ -22,7 +22,7 @@ type ErrorResponse struct {
 }
 
 type CreateObjectRequestJSON struct {
-	UserID   int    `json: "userid"`
+	Username string `json: "username"`
 	FileName string `json: "filename"`
 	FilePath string `json: "filepath"`
 	FileSize int64  `json: "filesize"`
@@ -42,7 +42,7 @@ type Object struct {
 	Name     string `json: "name"`
 	FilePath string `json: "filepath"`
 	FileSize int64  `json: "filesize"`
-	UserID   int    `json: "userid"`
+	Owner    string `json: "owner"`
 }
 
 // itob returns an 8-byte big endian representation of v.
@@ -50,29 +50,6 @@ func itob(v int) []byte {
 	b := make([]byte, 8)
 	binary.BigEndian.PutUint64(b, uint64(v))
 	return b
-}
-
-func putObject(entry *Object) error {
-	return mainDB.Update(func(tx *bolt.Tx) error {
-		// Retrieve the objects bucket.
-		// This should be created when the DB is first opened.
-		b := tx.Bucket([]byte("objects"))
-
-		// Generate ID for the object.
-		// This returns an error only if the Tx is closed or not writeable.
-		// That can't happen in an Update() call so I ignore the error check.
-		id, _ := b.NextSequence()
-		entry.ID = int(id)
-
-		// Marshal Object into bytes.
-		buf, err := json.Marshal(entry)
-		if err != nil {
-			return err
-		}
-
-		// Persist bytes to users bucket.
-		return b.Put(itob(entry.ID), buf)
-	})
 }
 
 func getObject(entryID int, returnObject *Object) error {
@@ -97,11 +74,87 @@ func getObjectHandler(res http.ResponseWriter, req *http.Request) {
 }
 
 func createObjectHandler(res http.ResponseWriter, req *http.Request) {
-	userRequestJSON := CreateObjectRequestJSON{}
-	err := json.NewDecoder(req.Body).Decode(&userRequestJSON)
+	requestJSON := CreateObjectRequestJSON{}
+	err := json.NewDecoder(req.Body).Decode(&requestJSON)
 	if err != nil {
 		fmt.Fprintf(res, "Error in decoding message")
 		res.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// Confirm that owner exists
+	var existingUser []byte
+	requestedKey := []byte(requestJSON.Username)
+	mainDB.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("users"))
+		existingUser = b.Get(requestedKey)
+		return nil
+	})
+	if existingUser == nil {
+		res.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(res, "User %v is not a registered user", requestJSON.Username)
+		return
+	}
+
+	// Create new object in database
+	newObject := Object{
+		Name:     requestJSON.FileName,
+		FilePath: requestJSON.FilePath,
+		FileSize: requestJSON.FileSize,
+		Owner:    requestJSON.Username,
+	}
+	err = mainDB.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("objects"))
+
+		// Generate ID for the object.
+		// This returns an error only if the Tx is closed or not writeable.
+		// That can't happen in an Update() call so I ignore the error check.
+		id, _ := b.NextSequence()
+		newObject.ID = int(id)
+
+		// Marshal Object into bytes.
+		buf, err := json.Marshal(newObject)
+		if err != nil {
+			return err
+		}
+
+		// Persist bytes to users bucket.
+		return b.Put(itob(newObject.ID), buf)
+	})
+	if err != nil {
+		res.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(res, "Error adding object to database.")
+		log.Printf("Error adding object to database.\nObject: %v", newObject)
+		return
+	}
+
+	// Update owner of new object
+	err = mainDB.Update(func(tx *bolt.Tx) error {
+		// Get owner out of users bucket
+		b := tx.Bucket([]byte("users"))
+		ownerData := b.Get([]byte(newObject.Owner))
+		ownerObject := User{}
+		err := json.Unmarshal(ownerData, ownerObject)
+		if err != nil {
+			return err
+		}
+
+		// Add new objectID
+		ownerObject.ObjectIDs = append(ownerObject.ObjectIDs, newObject.ID)
+
+		// Update data in bucket
+		buf, err := json.Marshal(ownerObject)
+		if err != nil {
+			return err
+		}
+
+		// Persist bytes to users bucket.
+		return b.Put([]byte(ownerObject.Username), buf)
+	})
+	if err != nil {
+		res.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(res, "Error adding object to database.")
+		log.Printf("Error updating owner in database.\nOwner: %v\nObject: %v", newObject.Owner, newObject.ID)
 		return
 	}
 
@@ -157,7 +210,6 @@ func createUserHandler(res http.ResponseWriter, req *http.Request) {
 	})
 
 	if err != nil {
-		log.Printf("Error creating new user in database %v ", err)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
