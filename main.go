@@ -15,10 +15,16 @@ import (
 
 var mainDB *bolt.DB
 
+// API JSON objects
 type ErrorResponse struct {
 	Code        int    `json: "code"`
 	Message     string `json: "message"`
 	Description string `json: "description"`
+}
+
+type GetObjectRequestJSON struct {
+	Username string `json: "username"`
+	FileName string `json: "filename"`
 }
 
 type CreateObjectRequestJSON struct {
@@ -31,6 +37,7 @@ type UserRequestJSON struct {
 	Username string `json: "username"`
 }
 
+// Internal use structs
 type User struct {
 	Username  string `json: "username"`
 	ObjectIDs []int  `json: "objectids"`
@@ -97,8 +104,7 @@ func createObjectHandler(res http.ResponseWriter, req *http.Request) {
 	// Create new object in database
 	newObject := Object{
 		Name:     requestJSON.FileName,
-		FileSize: requestJSON.FileSize,
-		Owner:    requestJSON.Username,
+		FileSize: requestJSON.FileSize, Owner: requestJSON.Username,
 	}
 	err = mainDB.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("objects"))
@@ -131,7 +137,7 @@ func createObjectHandler(res http.ResponseWriter, req *http.Request) {
 		b := tx.Bucket([]byte("users"))
 		ownerData := b.Get([]byte(newObject.Owner))
 		ownerObject := User{}
-		err := json.Unmarshal(ownerData, ownerObject)
+		err := json.Unmarshal(ownerData, &ownerObject)
 		if err != nil {
 			return err
 		}
@@ -148,10 +154,11 @@ func createObjectHandler(res http.ResponseWriter, req *http.Request) {
 		// Persist bytes to users bucket.
 		return b.Put([]byte(ownerObject.Username), buf)
 	})
+
 	if err != nil {
 		res.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(res, "Error adding object to database.")
-		log.Printf("Error updating owner in database.\nOwner: %v\nObject: %v", newObject.Owner, newObject.ID)
+		log.Printf("Error updating owner in database.\nOwner: %v\nObject: %v\nError: %v", newObject.Owner, newObject.ID, err)
 		return
 	}
 

@@ -161,11 +161,75 @@ func TestDeleteFictionalUser(t *testing.T) {
 	}
 }
 
-/*
-TODO:
-	- Test createObject
-		- Test owner not registered
-*/
+func TestCreateObjectValid(t *testing.T) {
+	// Create a request to pass to our handler.
+	createUserJSON := UserRequestJSON{Username: "happyUploader"}
+	buffer, err := json.Marshal(createUserJSON)
+	req, err := http.NewRequest("POST", "/user", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// We create a ResponseRecorder (which satisfies http.ResponseWriter) to record the response.
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(createUserHandler)
+
+	// Our handlers satisfy http.Handler, so we can call their ServeHTTP method
+	// directly and pass in our Request and ResponseRecorder.
+	handler.ServeHTTP(rr, req)
+
+	// Check the status code is what we expect.
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("user creator handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	// Create a request to pass to our handler.
+	createObjectJSON := CreateObjectRequestJSON{Username: "happyUploader", FileName: "foo.txt", FileSize: 20}
+	buffer, err = json.Marshal(createObjectJSON)
+	req, err = http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// We create a ResponseRecorder (which satisfies http.ResponseWriter) to record the response.
+	rr = httptest.NewRecorder()
+	createObjectHandler := http.HandlerFunc(createObjectHandler)
+
+	// Our handlers satisfy http.Handler, so we can call their ServeHTTP method
+	// directly and pass in our Request and ResponseRecorder.
+	createObjectHandler.ServeHTTP(rr, req)
+
+	// Check the status code is what we expect.
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("user creator handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+}
+
+func TestCreateObjectInvalidOwner(t *testing.T) {
+	// Create a request to pass to our handler.
+	createObjectJSON := CreateObjectRequestJSON{Username: "InvalidUploader", FileName: "bar.txt", FileSize: 40}
+	buffer, err := json.Marshal(createObjectJSON)
+	req, err := http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// We create a ResponseRecorder (which satisfies http.ResponseWriter) to record the response.
+	rr := httptest.NewRecorder()
+	createObjectHandler := http.HandlerFunc(createObjectHandler)
+
+	// Our handlers satisfy http.Handler, so we can call their ServeHTTP method
+	// directly and pass in our Request and ResponseRecorder.
+	createObjectHandler.ServeHTTP(rr, req)
+
+	// Check the status code is what we expect.
+	if status := rr.Code; status != http.StatusNotFound {
+		t.Errorf("user creator handler returned wrong status code: got %v want %v",
+			status, http.StatusNotFound)
+	}
+}
 
 func TestMain(m *testing.M) {
 	setup()
