@@ -1,4 +1,4 @@
-package barkr.barkr;
+package netsec.PiedPiper;
 
 import android.content.Context;
 import android.support.test.InstrumentationRegistry;

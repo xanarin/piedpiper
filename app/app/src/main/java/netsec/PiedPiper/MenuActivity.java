@@ -1,6 +1,5 @@
-package barkr.barkr;
+package netsec.PiedPiper;
 
-import android.content.Intent;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -8,13 +7,7 @@ import android.view.View;
 import android.widget.Button;
 import org.json.JSONObject;
 import android.os.AsyncTask;
-import android.os.Bundle;
-import android.support.v7.app.ActionBarActivity;
-import android.util.Log;
-import android.view.View;
-import android.widget.Button;
 import android.widget.TextView;
-
 import org.apache.http.HttpResponse;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.HttpClient;
@@ -22,8 +15,6 @@ import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.message.BasicNameValuePair;
-import org.json.JSONObject;
-
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -61,16 +52,16 @@ public class MenuActivity extends AppCompatActivity {
         @Override
         protected Void doInBackground(Void... voids) {
             HttpClient httpclient = new DefaultHttpClient();
-            HttpPost httppost = new HttpPost("<YOUR_SERVICE_URL>");
+            HttpPost httppost = new HttpPost("http://848.productions:3478/user");
 
             try {
 
                 JSONObject jsonobj = new JSONObject();
 
-                jsonobj.put("name", "Aneh");
-                jsonobj.put("age", "22");
+                jsonobj.put("username", "yupyupp");
 
                 List<NameValuePair> nameValuePairs = new ArrayList<NameValuePair>();
+                System.out.println(jsonobj.toString());
                 nameValuePairs.add(new BasicNameValuePair("req", jsonobj.toString()));
 
                 Log.e("mainToPost", "mainToPost" + nameValuePairs.toString());
@@ -81,7 +72,7 @@ public class MenuActivity extends AppCompatActivity {
                 // Execute HTTP Post Request
                 HttpResponse response = httpclient.execute(httppost);
                 InputStream inputStream = response.getEntity().getContent();
-                InputStreamToStringExample str = new InputStreamToStringExample();
+                StringifyStream str = new StringifyStream();
                 responseServer = str.getStringFromInputStream(inputStream);
                 Log.e("response", "response -----" + responseServer);
 
@@ -100,13 +91,12 @@ public class MenuActivity extends AppCompatActivity {
         }
     }
 
-    public static class InputStreamToStringExample {
+    public static class StringifyStream {
 
         public static void main(String[] args) throws IOException {
 
             // intilize an InputStream
-            InputStream is =
-                    new ByteArrayInputStream("file content..blah blah".getBytes());
+            InputStream is = new ByteArrayInputStream("".getBytes());
 
             String result = getStringFromInputStream(is);
 
