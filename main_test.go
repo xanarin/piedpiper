@@ -3,10 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"testing"
 )
 
@@ -18,7 +20,7 @@ func setup() {
 }
 
 func shutdown() {
-	mainDB.Close()
+	MainDB.Close()
 	os.Remove("test.db")
 }
 
@@ -138,6 +140,88 @@ func TestDeleteFictionalUser(t *testing.T) {
 	}
 }
 
+func TestPutGetObjectValid(t *testing.T) {
+	// Create user for this test
+	createUserJSON := UserRequestJSON{Username: "#TheRealUploader"}
+	buffer, err := json.Marshal(createUserJSON)
+	req, err := http.NewRequest("POST", "/user", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(createUserHandler)
+	handler.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("user creator handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	// Create a new object in the database
+	createObjectJSON := CreateObjectRequestJSON{Username: "#TheRealUploader", FileName: "rando239487246char.txt", FileSize: 20}
+	buffer, err = json.Marshal(createObjectJSON)
+	req, err = http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr = httptest.NewRecorder()
+	createObjectRunner := http.HandlerFunc(createObjectHandler)
+	createObjectRunner.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("user creator handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	uploadID, err := strconv.Atoi(rr.Body.String())
+	if err != nil {
+		t.Errorf("Failed to convert UploadID '%v' to integer", uploadID)
+	}
+
+	// Upload file to database
+	data := []byte("I am a test file! (not really, but don't tell anyone!")
+	req, err = http.NewRequest("POST", "/object/"+strconv.Itoa(uploadID)+"/", bytes.NewBuffer(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr = httptest.NewRecorder()
+	uploadObjectRunner := http.HandlerFunc(uploadObjectHandler)
+	uploadObjectRunner.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("object upload handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	// Get object back from database
+	getObjectJSON := GetObjectRequestJSON{Username: "#TheRealUploader", FileName: "rando239487246char.txt"}
+	buffer, err = json.Marshal(getObjectJSON)
+	req, err = http.NewRequest("GET", "/object", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr = httptest.NewRecorder()
+	getObjectRunner := http.HandlerFunc(getObjectHandler)
+	getObjectRunner.ServeHTTP(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("user creator handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	bs, err := ioutil.ReadAll(rr.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if string(bs) != string(data) {
+		t.Errorf("Returned data does not match uploaded data.\nExpected: %v\nActual: %v", string(data), string(bs))
+	}
+}
+
 func TestCreateObjectValid(t *testing.T) {
 	// Create a request to pass to our handler.
 	createUserJSON := UserRequestJSON{Username: "happyUploader"}
@@ -182,6 +266,11 @@ func TestCreateObjectValid(t *testing.T) {
 		t.Errorf("user creator handler returned wrong status code: got %v want %v",
 			status, http.StatusOK)
 	}
+
+	// Check the response body contains uploadSessionID
+	if rr.Body.String() == "" {
+		t.Errorf("handler returned empty body, wanted uploadSessionID")
+	}
 }
 
 func TestCreateObjectInvalidOwner(t *testing.T) {
@@ -208,7 +297,7 @@ func TestCreateObjectInvalidOwner(t *testing.T) {
 	}
 }
 
-func TestCreateGetObjectValid(t *testing.T) {
+func TestCreateGetObjectWithoutUpload(t *testing.T) {
 	// Create user for this test
 	createUserJSON := UserRequestJSON{Username: "SetGetGuy"}
 	buffer, err := json.Marshal(createUserJSON)
@@ -255,7 +344,7 @@ func TestCreateGetObjectValid(t *testing.T) {
 	getObjectRunner := http.HandlerFunc(getObjectHandler)
 	getObjectRunner.ServeHTTP(rr, req)
 
-	if status := rr.Code; status != http.StatusOK {
+	if status := rr.Code; status != http.StatusPreconditionFailed {
 		t.Errorf("user creator handler returned wrong status code: got %v want %v",
 			status, http.StatusOK)
 	}
