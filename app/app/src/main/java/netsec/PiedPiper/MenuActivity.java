@@ -5,6 +5,9 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+
+import org.apache.http.entity.BasicHttpEntity;
+import org.apache.http.entity.HttpEntityWrapper;
 import org.json.JSONObject;
 import android.os.AsyncTask;
 import android.widget.TextView;
@@ -52,7 +55,8 @@ public class MenuActivity extends AppCompatActivity {
         @Override
         protected Void doInBackground(Void... voids) {
             HttpClient httpclient = new DefaultHttpClient();
-            HttpPost httppost = new HttpPost("http://848.productions:3478/user");
+            //HttpPost httppost = new HttpPost("http://848.productions:3478/user");
+            HttpPost httppost = new HttpPost("http://tempi.kd8zev.net/test.php");
 
             try {
 
@@ -61,7 +65,6 @@ public class MenuActivity extends AppCompatActivity {
                 jsonobj.put("username", "yupyupp");
 
                 List<NameValuePair> nameValuePairs = new ArrayList<NameValuePair>();
-                System.out.println(jsonobj.toString());
                 nameValuePairs.add(new BasicNameValuePair("req", jsonobj.toString()));
 
                 Log.e("mainToPost", "mainToPost" + nameValuePairs.toString());
@@ -74,7 +77,7 @@ public class MenuActivity extends AppCompatActivity {
                 InputStream inputStream = response.getEntity().getContent();
                 StringifyStream str = new StringifyStream();
                 responseServer = str.getStringFromInputStream(inputStream);
-                Log.e("response", "response -----" + responseServer);
+                Log.e("response", responseServer);
 
 
             } catch (Exception e) {
@@ -94,8 +97,6 @@ public class MenuActivity extends AppCompatActivity {
     public static class StringifyStream {
 
         public static void main(String[] args) throws IOException {
-
-            // intilize an InputStream
             InputStream is = new ByteArrayInputStream("".getBytes());
 
             String result = getStringFromInputStream(is);
@@ -108,29 +109,27 @@ public class MenuActivity extends AppCompatActivity {
         // convert InputStream to String
         private static String getStringFromInputStream(InputStream is) {
 
-            BufferedReader br = null;
-            StringBuilder sb = new StringBuilder();
+            BufferedReader b_reader = null;
+            StringBuilder s_builder = new StringBuilder();
 
             String line;
             try {
-
-                br = new BufferedReader(new InputStreamReader(is));
-                while ((line = br.readLine()) != null) {
-                    sb.append(line);
+                b_reader = new BufferedReader(new InputStreamReader(is));
+                while ((line = b_reader.readLine()) != null) {
+                    s_builder.append(line);
                 }
-
             } catch (IOException e) {
                 e.printStackTrace();
             } finally {
-                if (br != null) {
+                if (b_reader != null) {
                     try {
-                        br.close();
+                        b_reader.close();
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
                 }
             }
-            return sb.toString();
+            return s_builder.toString();
         }
 
     }
