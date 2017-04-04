@@ -142,6 +142,7 @@ func getObjectHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 	http.ServeFile(res, req, filepath)
+  log.Printf("Object %v has been GOTten", finalObject.ID)
 }
 
 func createObjectHandler(res http.ResponseWriter, req *http.Request) {
@@ -271,6 +272,7 @@ func createObjectHandler(res http.ResponseWriter, req *http.Request) {
 	}
 
 	fmt.Fprintf(res, "%v", uploadSession.ID)
+  log.Printf("Object %v has been created with UploadID %v", uploadSession.Object.ID, uploadSession.ID)
 }
 
 func uploadObjectHandler(res http.ResponseWriter, req *http.Request) {
@@ -330,6 +332,7 @@ func uploadObjectHandler(res http.ResponseWriter, req *http.Request) {
 		b := tx.Bucket([]byte("uploads"))
 		return b.Delete(itob(uploadSession.ID))
 	})
+  log.Printf("Object %v has been uploaded with UploadID %v", uploadSession.Object.ID, uploadSession.ID)
 }
 
 func deleteObjectHandler(res http.ResponseWriter, req *http.Request) {
@@ -382,6 +385,7 @@ func createUserHandler(res http.ResponseWriter, req *http.Request) {
 		log.Printf("Database insert of user %v failed with error %v", requestJSON.Username, err)
 		return
 	}
+  log.Printf("User %v has been created", requestJSON.Username)
 }
 
 func deleteUserHandler(res http.ResponseWriter, req *http.Request) {
@@ -422,9 +426,11 @@ func deleteUserHandler(res http.ResponseWriter, req *http.Request) {
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+  log.Printf("User %v has been deleted", requestJSON.Username)
 }
 
 func initDB(dbfile string) error {
+  log.Printf("Database initializing....")
 	// Open Database Connection
 	var err error
 	// Open database, with a 1 second timeout in case something goes wrong
@@ -475,7 +481,7 @@ func main() {
 	log.Println("Initializing server...")
 
 	// These are set up in code for now, but will eventually be CLI params
-	addr := ":8080"
+	addr := ":3478"
 	dbfile := "prod.db"
 	DataPath = "data/"
 
