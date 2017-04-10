@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -142,7 +143,7 @@ func getObjectHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 	http.ServeFile(res, req, filepath)
-  log.Printf("Object %v has been GOTten", finalObject.ID)
+	log.Printf("Object %v has been GOTten", finalObject.ID)
 }
 
 func createObjectHandler(res http.ResponseWriter, req *http.Request) {
@@ -272,7 +273,7 @@ func createObjectHandler(res http.ResponseWriter, req *http.Request) {
 	}
 
 	fmt.Fprintf(res, "%v", uploadSession.ID)
-  log.Printf("Object %v has been created with UploadID %v", uploadSession.Object.ID, uploadSession.ID)
+	log.Printf("Object %v has been created with UploadID %v", uploadSession.Object.ID, uploadSession.ID)
 }
 
 func uploadObjectHandler(res http.ResponseWriter, req *http.Request) {
@@ -332,7 +333,7 @@ func uploadObjectHandler(res http.ResponseWriter, req *http.Request) {
 		b := tx.Bucket([]byte("uploads"))
 		return b.Delete(itob(uploadSession.ID))
 	})
-  log.Printf("Object %v has been uploaded with UploadID %v", uploadSession.Object.ID, uploadSession.ID)
+	log.Printf("Object %v has been uploaded with UploadID %v", uploadSession.Object.ID, uploadSession.ID)
 }
 
 func deleteObjectHandler(res http.ResponseWriter, req *http.Request) {
@@ -385,7 +386,7 @@ func createUserHandler(res http.ResponseWriter, req *http.Request) {
 		log.Printf("Database insert of user %v failed with error %v", requestJSON.Username, err)
 		return
 	}
-  log.Printf("User %v has been created", requestJSON.Username)
+	log.Printf("User %v has been created", requestJSON.Username)
 }
 
 func deleteUserHandler(res http.ResponseWriter, req *http.Request) {
@@ -426,11 +427,11 @@ func deleteUserHandler(res http.ResponseWriter, req *http.Request) {
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-  log.Printf("User %v has been deleted", requestJSON.Username)
+	log.Printf("User %v has been deleted", requestJSON.Username)
 }
 
 func initDB(dbfile string) error {
-  log.Printf("Database initializing....")
+	log.Printf("Database initializing....")
 	// Open Database Connection
 	var err error
 	// Open database, with a 1 second timeout in case something goes wrong
@@ -481,9 +482,13 @@ func main() {
 	log.Println("Initializing server...")
 
 	// These are set up in code for now, but will eventually be CLI params
-	addr := ":3478"
-	dbfile := "prod.db"
-	DataPath = "data/"
+	portPtr := flag.Int("port", 5678, "port for the server to bind")
+	dbfilePtr := flag.String("dbfile", "prod.db", "file to be used as database")
+	datapathPtr := flag.String("datapath", "./data/", "directory where data files will be stored")
+	tlsPtr := flag.Bool("ssl", false, "Whether SSL will be used when serving data")
+	fullChainPtr := flag.String("fullchain", "./fullchain.pem", "Full chain file (only used in SSL mode)")
+	privKeyPtr := flag.String("privatekey", "./privkey.pem", "Private key file (only used in SSL mode)")
+	flag.Parse()
 
 	// Set up HTTP Handling
 	mainRouter := mux.NewRouter()
@@ -499,14 +504,23 @@ func main() {
 	mainRouter.HandleFunc("/user", createUserHandler).Methods("POST")
 
 	// Initialize database
-	err := initDB(dbfile)
+	err := initDB(*dbfilePtr)
 	defer MainDB.Close()
 	if err != nil {
 		log.Printf("Database initialization failed with error %v", err)
 	}
 
+	// Set Data Directory
+	DataPath = *datapathPtr
+
 	// Kick off Server
-	log.Printf("Server Initialized. Listening on %v", addr)
-	err = http.ListenAndServe(addr, mainRouter)
+	serveString := fmt.Sprintf(":%v", *portPtr)
+	if *tlsPtr {
+		log.Printf("Server Initialized. Listening on %s. Serving with SSL.", serveString)
+		err = http.ListenAndServeTLS(serveString, *fullChainPtr, *privKeyPtr, mainRouter)
+	} else {
+		log.Printf("Server Initialized. Listening on %s.", serveString)
+		err = http.ListenAndServe(serveString, mainRouter)
+	}
 	log.Panicf("Main Router has crashed: %v", err)
 }
