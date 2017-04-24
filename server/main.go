@@ -41,7 +41,6 @@ type GetObjectRequestJSON struct {
 type CreateObjectRequestJSON struct {
 	Username string `json: "username"`
 	FileName string `json: "filename"`
-	FileSize int64  `json: "filesize"`
 }
 
 type UserCreationJSON struct {
@@ -70,7 +69,6 @@ type User struct {
 type Object struct {
 	ID            int    `json: "id"`
 	Name          string `json: "name"`
-	FileSize      int64  `json: "filesize"`
 	Owner         string `json: "owner"`
 	LocalFileName string `json: "localfilename"`
 }
@@ -199,7 +197,6 @@ func createObjectHandler(res http.ResponseWriter, req *http.Request) {
 
 	newObject := Object{
 		Name:          requestJSON.FileName,
-		FileSize:      requestJSON.FileSize,
 		Owner:         requestJSON.Username,
 		LocalFileName: randomFileName,
 	}
@@ -475,7 +472,13 @@ func authUserHandler(res http.ResponseWriter, req *http.Request) {
 	// This simply creates a random byte array
 	var nonce [24]byte
 	rand.Read(nonce[:])
-	expDateString := time.Now().UTC().Format("20060102150405")
+
+	// This is the life of the token
+	timeDuration, err := time.ParseDuration("144h")
+	if err != nil {
+		log.Panicf("%v", err)
+	}
+	expDateString := time.Now().UTC().Add(timeDuration).Format("20060102150405")
 
 	responseJSON := AuthUserResponseJSON{
 		ExpirationDate: expDateString,

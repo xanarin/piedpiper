@@ -109,7 +109,7 @@ func TestPutGetObjectValid(t *testing.T) {
 	}
 
 	// Create a new object in the database
-	createObjectJSON := CreateObjectRequestJSON{Username: "#TheRealUploader", FileName: "rando239487246char.txt", FileSize: 20}
+	createObjectJSON := CreateObjectRequestJSON{Username: "#TheRealUploader", FileName: "rando239487246char.txt"}
 	buffer, err = json.Marshal(createObjectJSON)
 	req, err = http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
 	if err != nil {
@@ -196,7 +196,7 @@ func TestCreateObjectValid(t *testing.T) {
 	}
 
 	// Create a request to pass to our handler.
-	createObjectJSON := CreateObjectRequestJSON{Username: "happyUploader", FileName: "foo.txt", FileSize: 20}
+	createObjectJSON := CreateObjectRequestJSON{Username: "happyUploader", FileName: "foo.txt"}
 	buffer, err = json.Marshal(createObjectJSON)
 	req, err = http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
 	if err != nil {
@@ -225,7 +225,7 @@ func TestCreateObjectValid(t *testing.T) {
 
 func TestCreateObjectInvalidOwner(t *testing.T) {
 	// Create a request to pass to our handler.
-	createObjectJSON := CreateObjectRequestJSON{Username: "InvalidUploader", FileName: "bar.txt", FileSize: 40}
+	createObjectJSON := CreateObjectRequestJSON{Username: "InvalidUploader", FileName: "bar.txt"}
 	buffer, err := json.Marshal(createObjectJSON)
 	req, err := http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
 	if err != nil {
@@ -266,7 +266,7 @@ func TestCreateGetObjectWithoutUpload(t *testing.T) {
 	}
 
 	// Create a new object in the database
-	createObjectJSON := CreateObjectRequestJSON{Username: "SetGetGuy", FileName: "rando239487246char.txt", FileSize: 20}
+	createObjectJSON := CreateObjectRequestJSON{Username: "SetGetGuy", FileName: "rando239487246char.txt"}
 	buffer, err = json.Marshal(createObjectJSON)
 	req, err = http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
 	if err != nil {
@@ -319,7 +319,7 @@ func TestCreateGetObjectBadOwner(t *testing.T) {
 	}
 
 	// Create a new object in the database
-	createObjectJSON := CreateObjectRequestJSON{Username: "BadOwner1", FileName: "rando239487246char.txt", FileSize: 20}
+	createObjectJSON := CreateObjectRequestJSON{Username: "BadOwner1", FileName: "rando239487246char.txt"}
 	buffer, err = json.Marshal(createObjectJSON)
 	req, err = http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
 	if err != nil {
@@ -443,6 +443,27 @@ func TestAuthUser(t *testing.T) {
 	if status := rr.Code; status != http.StatusOK {
 		t.Errorf("user creator handler returned wrong status code: got %v want %v",
 			status, http.StatusOK)
+	}
+
+	// Check the response body contains uploadSessionID
+	response := AuthUserResponseJSON{}
+	err = json.NewDecoder(rr.Body).Decode(&response)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(response.Nonce) != 24 {
+		t.Errorf("Nonce was not 24 characters long. Got '%v'", response.Nonce)
+	}
+
+	expTime, err := time.Parse("20060102150405", response.ExpirationDate)
+	if err != nil {
+		t.Errorf("Invalid timestamp returned from server. Got '%v'. Error from parser: %v", response.ExpirationDate, err)
+	}
+
+	expDuration := expTime.Sub(time.Now().UTC())
+	if expDuration.Hours() > 144.0 || expDuration.Hours() < 143.0 {
+		t.Errorf("Token expiration duration is out of range for spec. Got %v", expDuration)
 	}
 }
 
