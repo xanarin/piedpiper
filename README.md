@@ -23,7 +23,7 @@ C->S    {
         }
 S->C    {
             request:ticket,
-            repldate:<YYYYMMDDHHmmss>
+            expdate:<YYYYMMDDHHmmss>
             nonce:<128 random characters>,
         }
 
