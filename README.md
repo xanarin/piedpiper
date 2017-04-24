@@ -11,3 +11,23 @@ The server component of this platform is written in Golang, and is hosted in thi
 ## API Documentation
 
 All requests that require authentication must use HTTP basic auth to attach a username and password. _Eventually, a secret token-based system will take the place of this_
+
+### Ticket Generation and Request
+
+```
+C->S    {
+            request:ticket
+            reqdate:<YYYMMDDHHmmss>,
+            username:<username>
+            password:<password>
+        }
+S->C    {
+            request:ticket,
+            expdate:<YYYYMMDDHHmmss>
+            nonce:<128 random characters>,
+        }
+
+TOKEN: hash(<username><nonce><reqdate>)
+
+The hash we will use is SHA512
+```

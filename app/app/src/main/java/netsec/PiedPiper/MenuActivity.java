@@ -6,36 +6,42 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 
-import org.apache.http.entity.BasicHttpEntity;
-import org.apache.http.entity.HttpEntityWrapper;
 import org.json.JSONObject;
 import android.os.AsyncTask;
 import android.widget.TextView;
 import org.apache.http.HttpResponse;
-import org.apache.http.NameValuePair;
 import org.apache.http.client.HttpClient;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.message.BasicNameValuePair;
+
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.util.ArrayList;
-import java.util.List;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 import java.net.HttpURLConnection;
+import java.util.TimeZone;
+
 import org.apache.http.entity.StringEntity;
-import org.apache.http.util.EntityUtils;
 
 
 public class MenuActivity extends AppCompatActivity {
 
+    enum ServerAction {
+        USER_REGISTER,
+        REQUEST_TOKEN
+    }
+
     private final String TAG = this.getClass().getSimpleName();
 
-    private Button mPostButton;
+    private Button mRegisterBUtton;
+    private Button mTokenButton;
+
     String responseServer;
     TextView txt;
 
@@ -45,32 +51,39 @@ public class MenuActivity extends AppCompatActivity {
         setContentView(R.layout.activity_menu);
 
         txt = (TextView) findViewById(R.id.text);
-        mPostButton = (Button)findViewById(R.id.send_json);
-        mPostButton.setOnClickListener(new View.OnClickListener() {
+
+        mRegisterBUtton = (Button)findViewById(R.id.userRegister);
+        mRegisterBUtton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                AsyncT asyncT = new AsyncT();
-                asyncT.execute();
+                ProcessButton processButton = new ProcessButton();
+                processButton.execute(ServerAction.USER_REGISTER);
             }
         });
+
+        mTokenButton = (Button)findViewById(R.id.getToken);
+        mTokenButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                ProcessButton processButton = new ProcessButton();
+                processButton.execute(ServerAction.REQUEST_TOKEN);
+            }
+        });
+
     }
-
     /* Inner class to get response */
-    class AsyncT extends AsyncTask<Void, Void, Void> {
-        @Override
-        protected Void doInBackground(Void... voids) {
-//            HttpClient httpclient = new DefaultHttpClient();
-//            //HttpPost httppost = new HttpPost("http://848.productions:3478/user");
-//            HttpPost httppost = new HttpPost("https://pp.848.productions/user");
+    class ProcessButton extends AsyncTask<ServerAction, Void, Void> {
 
+        private String userRegister(String username) {
             HttpURLConnection urlConnection=null;
             String json = null;
-
+            String reply = null;
             try {
+                //Create User
 
                 HttpResponse response;
                 JSONObject jsonObject = new JSONObject();
-                jsonObject.accumulate("username", "kyle");
+                jsonObject.accumulate("username", username);
                 json = jsonObject.toString();
                 HttpClient httpClient = new DefaultHttpClient();
                 HttpPost httpPost = new HttpPost("https://pp.848.productions/user");
@@ -81,33 +94,74 @@ public class MenuActivity extends AppCompatActivity {
                 response = httpClient.execute(httpPost);
                 InputStream inputStream = response.getEntity().getContent();
                 StringifyStream str = new StringifyStream();
+                reply = str.getStringFromInputStream(inputStream);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return reply;
+        }
+
+        private String requestToken(String username, String password) {
+            HttpURLConnection urlConnection=null;
+            String json = null;
+            String reply = null;
+            try {
+                SimpleDateFormat dateFormatGmt = new SimpleDateFormat("yyyyMMddHHmmss");
+                dateFormatGmt.setTimeZone(TimeZone.getTimeZone("GMT"));
+                Date now = new Date();
+
+                HttpResponse response;
+                JSONObject jsonObject = new JSONObject();
+                jsonObject.accumulate("request", "ticket");
+                jsonObject.accumulate("reqdate", dateFormatGmt.format(now));
+                jsonObject.accumulate("username", username);
+                jsonObject.accumulate("password", password);
+                json = jsonObject.toString();
+                HttpClient httpClient = new DefaultHttpClient();
+                HttpPost httpPost = new HttpPost("https://pp.848.productions/user");
+                httpPost.setEntity(new StringEntity(json, "UTF-8"));
+                httpPost.setHeader("Content-Type", "application/json");
+                httpPost.setHeader("Accept-Encoding", "application/json");
+                httpPost.setHeader("Accept-Language", "en-US");
+                response = httpClient.execute(httpPost);
+
+                InputStream inputStream = response.getEntity().getContent();
+                StringifyStream str = new StringifyStream();
                 responseServer = str.getStringFromInputStream(inputStream);
+                Log.d("GetToken Server Reply", responseServer);
+                JSONObject replyJson = new JSONObject(responseServer);
+                reply = getHashCodeFromString(username + replyJson.getString("nonce") + jsonObject.getString("reqdate"));
+
                 Log.e("response", responseServer);
-
-
-//                JSONObject jsonobj = new JSONObject();
-//
-//                jsonobj.put("username", "kg");
-//
-//                List<NameValuePair> nameValuePairs = new ArrayList<NameValuePair>();
-//                nameValuePairs.add(new BasicNameValuePair("req", jsonobj.toString()));
-//
-//                Log.e("mainToPost", "mainToPost" + nameValuePairs.toString());
-//
-//                // Use UrlEncodedFormEntity to send in proper format which we need
-//                httppost.setEntity(new UrlEncodedFormEntity(nameValuePairs));
-//
-//                // Execute HTTP Post Request
-//                HttpResponse response = httpclient.execute(httppost);
-//                InputStream inputStream = response.getEntity().getContent();
-//                StringifyStream str = new StringifyStream();
-//                responseServer = str.getStringFromInputStream(inputStream);
-//                Log.e("response", responseServer);
-
 
             } catch (Exception e) {
                 e.printStackTrace();
             }
+            return reply;
+        }
+
+        @Override
+        protected Void doInBackground(ServerAction... params) {
+
+            Log.e("Entering doInBackground", params[0].name());
+
+            HttpURLConnection urlConnection=null;
+            String json = null;
+            ServerAction action = params[0];
+            String username = "user123";
+            String password = "pass123";
+
+            switch (action) {
+                case USER_REGISTER:
+                    responseServer = userRegister(username);
+                    break;
+                case REQUEST_TOKEN:
+                    responseServer = requestToken(username, password);
+                    break;
+                default:
+                    responseServer = "Action not registered";
+            }
+
             return null;
         }
 
@@ -158,6 +212,20 @@ public class MenuActivity extends AppCompatActivity {
         }
 
     }
+
+    private static String getHashCodeFromString(String str) throws NoSuchAlgorithmException {
+        MessageDigest md = MessageDigest.getInstance("SHA-512");
+        md.update(str.getBytes());
+        byte byteData[] = md.digest();
+
+        //convert the byte to hex format method 1
+        StringBuffer hashCodeBuffer = new StringBuffer();
+        for (int i = 0; i < byteData.length; i++) {
+            hashCodeBuffer.append(Integer.toString((byteData[i] & 0xff) + 0x100, 16).substring(1));
+        }
+        return hashCodeBuffer.toString();
+    }
+
 
     @Override
     protected void onResume(){

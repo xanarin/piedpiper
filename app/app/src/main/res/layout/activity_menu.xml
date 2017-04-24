@@ -14,10 +14,17 @@
         android:gravity="center" />
 
     <android.support.v7.widget.AppCompatButton
-        android:id="@+id/send_json"
+        android:id="@+id/userRegister"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:gravity="center"
-        android:text="Send JSON" />
+        android:text="Register User" />
+
+    <android.support.v7.widget.AppCompatButton
+        android:id="@+id/getToken"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="Get Token" />
 
 </android.support.v7.widget.LinearLayoutCompat>
