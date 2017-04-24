@@ -26,6 +26,11 @@ import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 
+import java.net.HttpURLConnection;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.util.EntityUtils;
+
+
 public class MenuActivity extends AppCompatActivity {
 
     private final String TAG = this.getClass().getSimpleName();
@@ -54,30 +59,50 @@ public class MenuActivity extends AppCompatActivity {
     class AsyncT extends AsyncTask<Void, Void, Void> {
         @Override
         protected Void doInBackground(Void... voids) {
-            HttpClient httpclient = new DefaultHttpClient();
-            //HttpPost httppost = new HttpPost("http://848.productions:3478/user");
-            HttpPost httppost = new HttpPost("http://tempi.kd8zev.net/test.php");
+//            HttpClient httpclient = new DefaultHttpClient();
+//            //HttpPost httppost = new HttpPost("http://848.productions:3478/user");
+//            HttpPost httppost = new HttpPost("https://pp.848.productions/user");
+
+            HttpURLConnection urlConnection=null;
+            String json = null;
 
             try {
 
-                JSONObject jsonobj = new JSONObject();
-
-                jsonobj.put("username", "yupyupp");
-
-                List<NameValuePair> nameValuePairs = new ArrayList<NameValuePair>();
-                nameValuePairs.add(new BasicNameValuePair("req", jsonobj.toString()));
-
-                Log.e("mainToPost", "mainToPost" + nameValuePairs.toString());
-
-                // Use UrlEncodedFormEntity to send in proper format which we need
-                httppost.setEntity(new UrlEncodedFormEntity(nameValuePairs));
-
-                // Execute HTTP Post Request
-                HttpResponse response = httpclient.execute(httppost);
+                HttpResponse response;
+                JSONObject jsonObject = new JSONObject();
+                jsonObject.accumulate("username", "kyle");
+                json = jsonObject.toString();
+                HttpClient httpClient = new DefaultHttpClient();
+                HttpPost httpPost = new HttpPost("https://pp.848.productions/user");
+                httpPost.setEntity(new StringEntity(json, "UTF-8"));
+                httpPost.setHeader("Content-Type", "application/json");
+                httpPost.setHeader("Accept-Encoding", "application/json");
+                httpPost.setHeader("Accept-Language", "en-US");
+                response = httpClient.execute(httpPost);
                 InputStream inputStream = response.getEntity().getContent();
                 StringifyStream str = new StringifyStream();
                 responseServer = str.getStringFromInputStream(inputStream);
                 Log.e("response", responseServer);
+
+
+//                JSONObject jsonobj = new JSONObject();
+//
+//                jsonobj.put("username", "kg");
+//
+//                List<NameValuePair> nameValuePairs = new ArrayList<NameValuePair>();
+//                nameValuePairs.add(new BasicNameValuePair("req", jsonobj.toString()));
+//
+//                Log.e("mainToPost", "mainToPost" + nameValuePairs.toString());
+//
+//                // Use UrlEncodedFormEntity to send in proper format which we need
+//                httppost.setEntity(new UrlEncodedFormEntity(nameValuePairs));
+//
+//                // Execute HTTP Post Request
+//                HttpResponse response = httpclient.execute(httppost);
+//                InputStream inputStream = response.getEntity().getContent();
+//                StringifyStream str = new StringifyStream();
+//                responseServer = str.getStringFromInputStream(inputStream);
+//                Log.e("response", responseServer);
 
 
             } catch (Exception e) {
