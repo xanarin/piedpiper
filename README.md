@@ -15,23 +15,19 @@ All requests that require authentication must use HTTP basic auth to attach a us
 ### Ticket Generation and Request
 
 ```
-C->S    
-{
-request:ticket
-date:<yyyymmddhhmmss>,
-}
-S->C    
-{
-request:ticket,
-nonce:<32 random characters>,
-date:<YYYYMMDDHHMMSS>
-C->S    
-{
-request:ticket
-date:<yyyymmddhhmmss>,
+C->S    {
+            request:ticket
+            reqdate:<YYYMMDDHHmmss>,
+            username:<username>
+            password:<password>
+        }
+S->C    {
+            request:ticket,
+            repldate:<YYYYMMDDHHmmss>
+            nonce:<128 random characters>,
+        }
 
-}
+TOKEN: hash(<username><nonce><reqdate>)
 
-
-
+The hash we will use is SHA512
 ```
