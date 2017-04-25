@@ -16,6 +16,7 @@ import javax.crypto.spec.SecretKeySpec;
 
 public class SimpleCrypto {
 
+    // TODO - I know this is very bad crypto (SHA1PRNG)
     public static byte[] generateKey(String password) {
         KeyGenerator kgen;
         SecureRandom sr;
@@ -42,6 +43,7 @@ public class SimpleCrypto {
         return skey.getEncoded();
     }
 
+    // TODO - I know this is very bad crypto (AES/ECb)
     public static byte[] encrypt(byte[] aesKey, byte[] plainText) throws Exception {
         SecretKeySpec skeySpec = new SecretKeySpec(aesKey, "AES");
         Cipher cipher = Cipher.getInstance("AES");
@@ -49,6 +51,7 @@ public class SimpleCrypto {
         return cipher.doFinal(plainText);
     }
 
+    // TODO - I know this is very bad crypto (AES/ECb)
     public static byte[] decrypt(byte[] aesKey, byte[] cipherText) throws Exception {
         SecretKeySpec skeySpec = new SecretKeySpec(aesKey, "AES");
         Cipher cipher = Cipher.getInstance("AES");
