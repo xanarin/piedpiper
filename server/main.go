@@ -2,19 +2,22 @@ package main
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
-	"math/rand"
+	insecureRand "math/rand"
 	"net/http"
 	"os"
 	"path"
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/boltdb/bolt"
 	"github.com/gorilla/mux"
@@ -38,23 +41,34 @@ type GetObjectRequestJSON struct {
 type CreateObjectRequestJSON struct {
 	Username string `json: "username"`
 	FileName string `json: "filename"`
-	FileSize int64  `json: "filesize"`
 }
 
-type UserRequestJSON struct {
+type UserCreationJSON struct {
 	Username string `json: "username"`
+	Password string `json: "password"`
+}
+
+type AuthUserRequestJSON struct {
+	Username string `json: "username"`
+	Password string `json: "password"`
+	Foo      string `json: "foo"`
+}
+
+type AuthUserResponseJSON struct {
+	ExpirationDate string `json: "expdate"`
+	Nonce          []byte `json: "nonce"`
 }
 
 // Internal use structs
 type User struct {
-	Username  string `json: "username"`
-	ObjectIDs []int  `json: "objectids"`
+	Username     string `json: "username"`
+	PasswordHash []byte `json: "passhash"`
+	ObjectIDs    []int  `json: "objectids"`
 }
 
 type Object struct {
 	ID            int    `json: "id"`
 	Name          string `json: "name"`
-	FileSize      int64  `json: "filesize"`
 	Owner         string `json: "owner"`
 	LocalFileName string `json: "localfilename"`
 }
@@ -89,6 +103,7 @@ func getObjectHandler(res http.ResponseWriter, req *http.Request) {
 		return nil
 	})
 	if userData == nil {
+		log.Printf("Tried to use uninitialized user '%v'", requestJSON.Username)
 		res.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(res, "User %v is not a registered user", requestJSON.Username)
 		return
@@ -172,8 +187,8 @@ func createObjectHandler(res http.ResponseWriter, req *http.Request) {
 	// Create new object in database
 	// Create Random filename
 	CHARS := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
-	seed := rand.NewSource(time.Now().UnixNano())
-	bag := rand.New(seed)
+	seed := insecureRand.NewSource(time.Now().UnixNano())
+	bag := insecureRand.New(seed)
 
 	b := make([]byte, 36)
 	for i := range b {
@@ -183,7 +198,6 @@ func createObjectHandler(res http.ResponseWriter, req *http.Request) {
 
 	newObject := Object{
 		Name:          requestJSON.FileName,
-		FileSize:      requestJSON.FileSize,
 		Owner:         requestJSON.Username,
 		LocalFileName: randomFileName,
 	}
@@ -336,12 +350,11 @@ func uploadObjectHandler(res http.ResponseWriter, req *http.Request) {
 	log.Printf("Object %v has been uploaded with UploadID %v", uploadSession.Object.ID, uploadSession.ID)
 }
 
-func deleteObjectHandler(res http.ResponseWriter, req *http.Request) {
-
+func fooHandler(res http.ResponseWriter, req *http.Request) {
+	fmt.Fprintf(res, "You got it!")
 }
-
 func createUserHandler(res http.ResponseWriter, req *http.Request) {
-	requestJSON := UserRequestJSON{}
+	requestJSON := UserCreationJSON{}
 
 	err := json.NewDecoder(req.Body).Decode(&requestJSON)
 	if err != nil {
@@ -364,7 +377,22 @@ func createUserHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	userObject := User{Username: requestJSON.Username, ObjectIDs: []int{}}
+	// Hash password
+	plainData := []byte(requestJSON.Password + requestJSON.Username)
+	// Hashing the password with the default cost of 10
+	hashedData, err := bcrypt.GenerateFromPassword(plainData, bcrypt.DefaultCost)
+	if err != nil {
+		res.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(res, "Server encountered an error hashing the password")
+		log.Printf("Encountered an error hashing the password '%s' with username '%s' using Bcrypt.", requestJSON.Password, requestJSON.Username)
+		return
+	}
+
+	userObject := User{
+		Username:     requestJSON.Username,
+		PasswordHash: hashedData,
+		ObjectIDs:    []int{},
+	}
 
 	err = MainDB.Update(func(tx *bolt.Tx) error {
 		// Retrieve the objects bucket.
@@ -389,9 +417,8 @@ func createUserHandler(res http.ResponseWriter, req *http.Request) {
 	log.Printf("User %v has been created", requestJSON.Username)
 }
 
-func deleteUserHandler(res http.ResponseWriter, req *http.Request) {
-	requestJSON := UserRequestJSON{}
-
+func authUserHandler(res http.ResponseWriter, req *http.Request) {
+	requestJSON := AuthUserRequestJSON{}
 	err := json.NewDecoder(req.Body).Decode(&requestJSON)
 	if err != nil {
 		res.WriteHeader(http.StatusBadRequest)
@@ -399,35 +426,80 @@ func deleteUserHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	var existingObject []byte
+	// Confirm that owner exists
+	var userData []byte
 	requestedKey := []byte(requestJSON.Username)
 	MainDB.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("users"))
-		existingObject = b.Get(requestedKey)
+		userData = b.Get(requestedKey)
 		return nil
 	})
-
-	if existingObject == nil {
+	if userData == nil {
 		res.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(res, "That username does not exist")
+		fmt.Fprintf(res, "User %v is not a registered user", requestJSON.Username)
 		return
 	}
-
-	err = MainDB.Update(func(tx *bolt.Tx) error {
-		// Retrieve the objects bucket.
-		// This should be created when the DB is first opened.
-		b := tx.Bucket([]byte("users"))
-
-		// Persist bytes to users bucket.
-		return b.Delete(requestedKey)
-	})
-
+	// Unmarshal User Object
+	userObject := User{}
+	err = json.Unmarshal(userData, &userObject)
 	if err != nil {
-		log.Printf("Error deleting user in database. %v ", err)
 		res.WriteHeader(http.StatusInternalServerError)
+		log.Printf("Error unmarshalling owner object from database. %v", err)
 		return
 	}
-	log.Printf("User %v has been deleted", requestJSON.Username)
+
+	// Bcrypt
+	err = bcrypt.CompareHashAndPassword(userObject.PasswordHash, []byte(requestJSON.Password+requestJSON.Username))
+	if err != nil {
+		res.WriteHeader(http.StatusForbidden)
+		fmt.Fprintf(res, "Invalid password given for user %v", requestJSON.Username)
+		return
+	}
+
+	// Check RequestDate (to prevent replay attack)
+	requestDate, err := time.Parse("20060102150405", requestJSON.Foo)
+	if err != nil {
+		res.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(res, "Invalid time stamp.")
+		log.Printf("Invalid time stamp from user: '%v'. Parser gave error: %v", requestJSON.Foo, err)
+		return
+	}
+
+	timeSinceRequest := time.Now().UTC().Sub(requestDate)
+	if timeSinceRequest.Minutes() > 5.0 {
+		res.WriteHeader(http.StatusExpectationFailed)
+		fmt.Fprintf(res, "Request Time is greater than 5 minutes ago.")
+		log.Printf("Request time >5 minutes from current time. \n\tRequest Time: '%v' \n\tCurrent Time: '%v'", requestDate, time.Now().UTC())
+		return
+	}
+
+	// At this point, user has been successfully authenticated. Generate a nonce and send it back.
+	// This simply creates a random byte array
+	var nonce [24]byte
+	rand.Read(nonce[:])
+
+	// This is the life of the token
+	timeDuration, err := time.ParseDuration("144h")
+	if err != nil {
+		log.Panicf("%v", err)
+	}
+	expDateString := time.Now().UTC().Add(timeDuration).Format("20060102150405")
+
+	responseJSON := AuthUserResponseJSON{
+		ExpirationDate: expDateString,
+		Nonce:          nonce[:],
+	}
+
+	// Write response back to client
+	responseData, err := json.Marshal(responseJSON)
+	if err != nil {
+		res.WriteHeader(http.StatusInternalServerError)
+		log.Printf("Error marshalling response for client", err)
+		return
+	}
+
+	res.Header().Set("Content-Type", "application/json")
+	res.Write(responseData)
 }
 
 func initDB(dbfile string) error {
@@ -492,15 +564,18 @@ func main() {
 
 	// Set up HTTP Handling
 	mainRouter := mux.NewRouter()
+
+	// Auth Actions
+	mainRouter.HandleFunc("/auth", authUserHandler)
+	mainRouter.HandleFunc("/foo", fooHandler)
 	// Object Actions
 	mainRouter.HandleFunc("/object", getObjectHandler).Methods("GET")
 	mainRouter.HandleFunc("/object", createObjectHandler).Methods("POST")
 	mainRouter.HandleFunc("/object", createObjectHandler).Methods("PUT")
 	mainRouter.HandleFunc("/object/{uploadid}", uploadObjectHandler).Methods("POST")
 	mainRouter.HandleFunc("/object/{uploadid}", uploadObjectHandler).Methods("PUT")
-	mainRouter.HandleFunc("/object", deleteObjectHandler).Methods("DELETE")
+
 	// User Actions
-	mainRouter.HandleFunc("/user", deleteUserHandler).Methods("DELETE")
 	mainRouter.HandleFunc("/user", createUserHandler).Methods("POST")
 
 	// Initialize database
