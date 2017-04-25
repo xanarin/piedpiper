@@ -60,6 +60,9 @@ public class MenuActivity extends AppCompatActivity {
         txt = (TextView) findViewById(R.id.text);
 
         aesKey = SimpleCrypto.generateKey("Thisismypassword");
+        if (aesKey == null) {
+            Log.e("onCreate", "Unable to generate key");
+        }
         plainText = "This is my plaintext".getBytes();
         cipherText = "".getBytes();
 
@@ -88,8 +91,8 @@ public class MenuActivity extends AppCompatActivity {
                 try {
                     final byte[] finalPlain = plainText.clone();
                     cipherText = SimpleCrypto.encrypt(aesKey, finalPlain);
-                    Log.i("Encrypt - Plain", plainText.toString());
-                    Log.i("Encrypt - Cipher", cipherText.toString());
+                    Log.i("Encrypt - Plain", SimpleCrypto.bytesToHex(plainText));
+                    Log.i("Encrypt - Cipher", SimpleCrypto.bytesToHex(cipherText));
 
                 } catch (Exception e) {
                     Log.e("Encrypt", e.toString());
@@ -103,8 +106,8 @@ public class MenuActivity extends AppCompatActivity {
                 try {
                     final byte[] finalCipher = cipherText.clone();
                     plainText = SimpleCrypto.decrypt(aesKey, finalCipher);
-                    Log.i("Decrypt - Cipher", cipherText.toString());
-                    Log.i("Decrypt - Plain", plainText.toString());
+                    Log.i("Decrypt - Cipher", SimpleCrypto.bytesToHex(cipherText));
+                    Log.i("Decrypt - Plain", SimpleCrypto.bytesToHex(plainText));
                 } catch (Exception e) {
                     Log.e("Decrypt", e.toString());
                 }
