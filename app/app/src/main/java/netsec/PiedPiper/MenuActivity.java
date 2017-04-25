@@ -39,8 +39,15 @@ public class MenuActivity extends AppCompatActivity {
 
     private final String TAG = this.getClass().getSimpleName();
 
-    private Button mRegisterBUtton;
+    private Button mRegisterButton;
     private Button mTokenButton;
+    private Button mEncryptButton;
+    private Button mDecryptButton;
+
+    private byte[] plainText;
+    private byte[] cipherText;
+
+    private byte[] aesKey;
 
     String responseServer;
     TextView txt;
@@ -52,8 +59,12 @@ public class MenuActivity extends AppCompatActivity {
 
         txt = (TextView) findViewById(R.id.text);
 
-        mRegisterBUtton = (Button)findViewById(R.id.userRegister);
-        mRegisterBUtton.setOnClickListener(new View.OnClickListener() {
+        aesKey = SimpleCrypto.generateKey("Thisismypassword");
+        plainText = "This is my plaintext".getBytes();
+        cipherText = "".getBytes();
+
+        mRegisterButton = (Button)findViewById(R.id.userRegister);
+        mRegisterButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 ProcessButton processButton = new ProcessButton();
@@ -67,6 +78,36 @@ public class MenuActivity extends AppCompatActivity {
             public void onClick(View view) {
                 ProcessButton processButton = new ProcessButton();
                 processButton.execute(ServerAction.REQUEST_TOKEN);
+            }
+        });
+
+        mEncryptButton = (Button)findViewById(R.id.encrypt);
+        mEncryptButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                try {
+                    final byte[] finalPlain = plainText.clone();
+                    cipherText = SimpleCrypto.encrypt(aesKey, finalPlain);
+                    Log.i("Encrypt - Plain", plainText.toString());
+                    Log.i("Encrypt - Cipher", cipherText.toString());
+
+                } catch (Exception e) {
+                    Log.e("Encrypt", e.toString());
+                }
+            }
+        });
+        mDecryptButton = (Button)findViewById(R.id.decrypt);
+        mDecryptButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                try {
+                    final byte[] finalCipher = cipherText.clone();
+                    plainText = SimpleCrypto.decrypt(aesKey, finalCipher);
+                    Log.i("Decrypt - Cipher", cipherText.toString());
+                    Log.i("Decrypt - Plain", plainText.toString());
+                } catch (Exception e) {
+                    Log.e("Decrypt", e.toString());
+                }
             }
         });
 
@@ -262,5 +303,4 @@ public class MenuActivity extends AppCompatActivity {
         super.onStop();
         Log.d(TAG, "ON STOP");
     }
-
 }
