@@ -12,17 +12,27 @@ The server component of this platform is written in Golang, and is hosted in thi
 
 All requests that require authentication must use HTTP basic auth to attach a username and password. _Eventually, a secret token-based system will take the place of this_
 
+### User Registration
+```
+C -> S  {
+            Username:<username>,
+            Password:<password>
+        }
+
+S -> C  200 Status Code, or Error Data
+```
+User password is stored in the database as Bcrypt(Password,Username).
+
+
 ### Ticket Generation and Request
 
 ```
 C->S    {
-            request:ticket
-            reqdate:<YYYMMDDHHmmss>,
+            reqdate:<YYYYMMDDHHmmss>,
             username:<username>
             password:<password>
         }
 S->C    {
-            request:ticket,
             expdate:<YYYYMMDDHHmmss>
             nonce:<128 random characters>,
         }
