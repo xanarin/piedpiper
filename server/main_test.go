@@ -423,9 +423,9 @@ func TestAuthUser(t *testing.T) {
 
 	// Authenticate User
 	authUserJSON := AuthUserRequestJSON{
-		Username:    "Authenticator",
-		Password:    "password",
-		RequestDate: time.Now().UTC().Format("20060102150405"),
+		Username: "Authenticator",
+		Password: "password",
+		Foo:      time.Now().UTC().Format("20060102150405"),
 	}
 	buffer, err = json.Marshal(authUserJSON)
 	if err != nil {
@@ -487,9 +487,9 @@ func TestAuthUserBadPassword(t *testing.T) {
 
 	// Authenticate User
 	authUserJSON := AuthUserRequestJSON{
-		Username:    "badauthguy",
-		Password:    "password2", // Note: Not the password that was given during registration
-		RequestDate: time.Now().UTC().Format("20060102150405"),
+		Username: "badauthguy",
+		Password: "password2", // Note: Not the password that was given during registration
+		Foo:      time.Now().UTC().Format("20060102150405"),
 	}
 	buffer, err = json.Marshal(authUserJSON)
 	if err != nil {
@@ -537,9 +537,9 @@ func TestAuthUserReplayAttack(t *testing.T) {
 	badTimeStamp := time.Now().UTC().Add(negativeTenMinutes).Format("20060102150405")
 	// Authenticate User
 	authUserJSON := AuthUserRequestJSON{
-		Username:    "naiveuser",
-		Password:    "verysecurepassword", // Note: Not the password that was given during registration
-		RequestDate: badTimeStamp,
+		Username: "naiveuser",
+		Password: "verysecurepassword", // Note: Not the password that was given during registration
+		Foo:      badTimeStamp,
 	}
 	buffer, err = json.Marshal(authUserJSON)
 	if err != nil {
