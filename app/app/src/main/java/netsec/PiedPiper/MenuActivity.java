@@ -118,6 +118,7 @@ public class MenuActivity extends AppCompatActivity {
                 jsonObject.accumulate("username", username);
                 jsonObject.accumulate("password", password);
                 json = jsonObject.toString();
+                Log.i("getting:", json);
                 HttpClient httpClient = new DefaultHttpClient();
                 HttpGet httpGet = new HttpGet("https://pp.848.productions/auth");
                 //httpGet.setEntity(new StringEntity(json, "UTF-8"));
