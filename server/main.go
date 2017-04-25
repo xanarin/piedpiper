@@ -51,7 +51,7 @@ type UserCreationJSON struct {
 type AuthUserRequestJSON struct {
 	Username string `json: "username"`
 	Password string `json: "password"`
-	Foo      string `json: "foo"`
+	ReqDate  string `json: "reqdate"`
 }
 
 type AuthUserResponseJSON struct {
@@ -350,9 +350,6 @@ func uploadObjectHandler(res http.ResponseWriter, req *http.Request) {
 	log.Printf("Object %v has been uploaded with UploadID %v", uploadSession.Object.ID, uploadSession.ID)
 }
 
-func fooHandler(res http.ResponseWriter, req *http.Request) {
-	fmt.Fprintf(res, "You got it!")
-}
 func createUserHandler(res http.ResponseWriter, req *http.Request) {
 	requestJSON := UserCreationJSON{}
 
@@ -425,6 +422,7 @@ func authUserHandler(res http.ResponseWriter, req *http.Request) {
 		fmt.Fprintf(res, "Error in decoding message")
 		return
 	}
+	log.Printf("Request: %v", requestJSON)
 
 	// Confirm that owner exists
 	var userData []byte
@@ -457,11 +455,11 @@ func authUserHandler(res http.ResponseWriter, req *http.Request) {
 	}
 
 	// Check RequestDate (to prevent replay attack)
-	requestDate, err := time.Parse("20060102150405", requestJSON.Foo)
+	requestDate, err := time.Parse("20060102150405", requestJSON.ReqDate)
 	if err != nil {
 		res.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(res, "Invalid time stamp.")
-		log.Printf("Invalid time stamp from user: '%v'. Parser gave error: %v", requestJSON.Foo, err)
+		log.Printf("Invalid time stamp from user: '%v'. Parser gave error: %v", requestJSON.ReqDate, err)
 		return
 	}
 
@@ -567,7 +565,6 @@ func main() {
 
 	// Auth Actions
 	mainRouter.HandleFunc("/auth", authUserHandler)
-	mainRouter.HandleFunc("/foo", fooHandler)
 	// Object Actions
 	mainRouter.HandleFunc("/object", getObjectHandler).Methods("GET")
 	mainRouter.HandleFunc("/object", createObjectHandler).Methods("POST")
