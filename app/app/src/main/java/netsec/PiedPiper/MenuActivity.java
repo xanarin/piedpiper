@@ -6,6 +6,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 
+import org.apache.http.client.methods.HttpGet;
 import org.json.JSONObject;
 import android.os.AsyncTask;
 import android.widget.TextView;
@@ -74,7 +75,7 @@ public class MenuActivity extends AppCompatActivity {
     /* Inner class to get response */
     class ProcessButton extends AsyncTask<ServerAction, Void, Void> {
 
-        private String userRegister(String username) {
+        private String userRegister(String user, String pass) {
             HttpURLConnection urlConnection=null;
             String json = null;
             String reply = null;
@@ -83,7 +84,8 @@ public class MenuActivity extends AppCompatActivity {
 
                 HttpResponse response;
                 JSONObject jsonObject = new JSONObject();
-                jsonObject.accumulate("username", username);
+                jsonObject.accumulate("username", user);
+                jsonObject.accumulate("password", pass);
                 json = jsonObject.toString();
                 HttpClient httpClient = new DefaultHttpClient();
                 HttpPost httpPost = new HttpPost("https://pp.848.productions/user");
@@ -112,18 +114,18 @@ public class MenuActivity extends AppCompatActivity {
 
                 HttpResponse response;
                 JSONObject jsonObject = new JSONObject();
-                jsonObject.accumulate("request", "ticket");
                 jsonObject.accumulate("reqdate", dateFormatGmt.format(now));
                 jsonObject.accumulate("username", username);
                 jsonObject.accumulate("password", password);
                 json = jsonObject.toString();
                 HttpClient httpClient = new DefaultHttpClient();
-                HttpPost httpPost = new HttpPost("https://pp.848.productions/user");
-                httpPost.setEntity(new StringEntity(json, "UTF-8"));
-                httpPost.setHeader("Content-Type", "application/json");
-                httpPost.setHeader("Accept-Encoding", "application/json");
-                httpPost.setHeader("Accept-Language", "en-US");
-                response = httpClient.execute(httpPost);
+                HttpGet httpGet = new HttpGet("https://pp.848.productions/auth");
+                //httpGet.setEntity(new StringEntity(json, "UTF-8"));
+                httpGet.setHeader("Content-Type", "application/json");
+                httpGet.setHeader("Accept-Encoding", "application/json");
+                httpGet.setHeader("Accept-Language", "en-US");
+                response = httpClient.execute(httpGet);
+                Log.i("response", response.getStatusLine().getReasonPhrase());
 
                 InputStream inputStream = response.getEntity().getContent();
                 StringifyStream str = new StringifyStream();
@@ -148,12 +150,12 @@ public class MenuActivity extends AppCompatActivity {
             HttpURLConnection urlConnection=null;
             String json = null;
             ServerAction action = params[0];
-            String username = "user123";
-            String password = "pass123";
+            String username = "user1234";
+            String password = "pass1234";
 
             switch (action) {
                 case USER_REGISTER:
-                    responseServer = userRegister(username);
+                    responseServer = userRegister(username, password);
                     break;
                 case REQUEST_TOKEN:
                     responseServer = requestToken(username, password);
