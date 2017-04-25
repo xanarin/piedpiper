@@ -94,6 +94,7 @@ public class MenuActivity extends AppCompatActivity {
                     cipherText = SimpleCrypto.encrypt(aesKey, finalPlain);
                     Log.i("Encrypt - Plain", SimpleCrypto.bytesToHex(plainText));
                     Log.i("Encrypt - Cipher", SimpleCrypto.bytesToHex(cipherText));
+                    txt.setText("Plain: " + SimpleCrypto.bytesToHex(plainText) + "\nCipher: " + SimpleCrypto.bytesToHex(cipherText));
 
                 } catch (Exception e) {
                     Log.e("Encrypt", e.toString());
@@ -109,6 +110,8 @@ public class MenuActivity extends AppCompatActivity {
                     plainText = SimpleCrypto.decrypt(aesKey, finalCipher);
                     Log.i("Decrypt - Cipher", SimpleCrypto.bytesToHex(cipherText));
                     Log.i("Decrypt - Plain", SimpleCrypto.bytesToHex(plainText));
+                    txt.setText("Cipher: " + SimpleCrypto.bytesToHex(cipherText) + "\nPlain: " + SimpleCrypto.bytesToHex(plainText));
+
                 } catch (Exception e) {
                     Log.e("Decrypt", e.toString());
                 }
@@ -158,18 +161,18 @@ public class MenuActivity extends AppCompatActivity {
 
                 HttpResponse response;
                 JSONObject jsonObject = new JSONObject();
-                jsonObject.accumulate("reqdate", dateFormatGmt.format(now));
+                jsonObject.accumulate("foo", dateFormatGmt.format(now));
                 jsonObject.accumulate("username", username);
                 jsonObject.accumulate("password", password);
                 json = jsonObject.toString();
                 Log.i("getting:", json);
                 HttpClient httpClient = new DefaultHttpClient();
-                HttpGet httpGet = new HttpGet("https://pp.848.productions/auth");
-                //httpGet.setEntity(new StringEntity(json, "UTF-8"));
-                httpGet.setHeader("Content-Type", "application/json");
-                httpGet.setHeader("Accept-Encoding", "application/json");
-                httpGet.setHeader("Accept-Language", "en-US");
-                response = httpClient.execute(httpGet);
+                HttpPost httpPost = new HttpPost("https://pp.848.productions/auth");
+                httpPost.setEntity(new StringEntity(json, "UTF-8"));
+                httpPost.setHeader("Content-Type", "application/json");
+                httpPost.setHeader("Accept-Encoding", "application/json");
+                httpPost.setHeader("Accept-Language", "en-US");
+                response = httpClient.execute(httpPost);
                 Log.i("response", response.getStatusLine().getReasonPhrase());
 
                 InputStream inputStream = response.getEntity().getContent();
@@ -177,14 +180,14 @@ public class MenuActivity extends AppCompatActivity {
                 responseServer = str.getStringFromInputStream(inputStream);
                 Log.d("GetToken Server Reply", responseServer);
                 JSONObject replyJson = new JSONObject(responseServer);
-                reply = getHashCodeFromString(username + replyJson.getString("nonce") + jsonObject.getString("reqdate"));
+                reply = getHashCodeFromString(username + replyJson.getString("Nonce") + jsonObject.getString("foo"));
 
                 Log.e("response", responseServer);
 
             } catch (Exception e) {
                 e.printStackTrace();
             }
-            return reply;
+            return "Device Token: " + reply;
         }
 
         @Override
