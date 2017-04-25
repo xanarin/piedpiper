@@ -49,9 +49,9 @@ type UserCreationJSON struct {
 }
 
 type AuthUserRequestJSON struct {
-	RequestDate string `json: "reqdate"`
-	Username    string `json: "username"`
-	Password    string `json: "password"`
+	Username string `json: "username"`
+	Password string `json: "password"`
+	Foo      string `json: "foo"`
 }
 
 type AuthUserResponseJSON struct {
@@ -103,6 +103,7 @@ func getObjectHandler(res http.ResponseWriter, req *http.Request) {
 		return nil
 	})
 	if userData == nil {
+		log.Printf("Tried to use uninitialized user '%v'", requestJSON.Username)
 		res.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(res, "User %v is not a registered user", requestJSON.Username)
 		return
@@ -349,6 +350,9 @@ func uploadObjectHandler(res http.ResponseWriter, req *http.Request) {
 	log.Printf("Object %v has been uploaded with UploadID %v", uploadSession.Object.ID, uploadSession.ID)
 }
 
+func fooHandler(res http.ResponseWriter, req *http.Request) {
+	fmt.Fprintf(res, "You got it!")
+}
 func createUserHandler(res http.ResponseWriter, req *http.Request) {
 	requestJSON := UserCreationJSON{}
 
@@ -453,10 +457,11 @@ func authUserHandler(res http.ResponseWriter, req *http.Request) {
 	}
 
 	// Check RequestDate (to prevent replay attack)
-	requestDate, err := time.Parse("20060102150405", requestJSON.RequestDate)
+	requestDate, err := time.Parse("20060102150405", requestJSON.Foo)
 	if err != nil {
 		res.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(res, "Invalid time stamp.")
+		log.Printf("Invalid time stamp from user: '%v'. Parser gave error: %v", requestJSON.Foo, err)
 		return
 	}
 
@@ -559,6 +564,10 @@ func main() {
 
 	// Set up HTTP Handling
 	mainRouter := mux.NewRouter()
+
+	// Auth Actions
+	mainRouter.HandleFunc("/auth", authUserHandler)
+	mainRouter.HandleFunc("/foo", fooHandler)
 	// Object Actions
 	mainRouter.HandleFunc("/object", getObjectHandler).Methods("GET")
 	mainRouter.HandleFunc("/object", createObjectHandler).Methods("POST")
@@ -568,9 +577,6 @@ func main() {
 
 	// User Actions
 	mainRouter.HandleFunc("/user", createUserHandler).Methods("POST")
-
-	// Auth Actions
-	mainRouter.HandleFunc("/auth", authUserHandler).Methods("GET")
 
 	// Initialize database
 	err := initDB(*dbfilePtr)
