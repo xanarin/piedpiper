@@ -1,6 +1,11 @@
 package netsec.PiedPiper;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Environment;
+import android.support.annotation.RequiresApi;
+import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -15,6 +20,8 @@ import org.apache.http.params.HttpParams;
 import org.json.JSONObject;
 import android.os.AsyncTask;
 import android.widget.TextView;
+import android.widget.Toast;
+
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
@@ -22,11 +29,13 @@ import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.message.BasicNameValuePair;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -54,7 +63,8 @@ public class MenuActivity extends AppCompatActivity {
         CREATE_OBJECT,
         UPLOAD_OBJECT,
         GET_OBJECT,
-        CONVERT_FILE
+        CONVERT_FILE,
+        SAVE_FILE
     }
 
     private final String TAG = this.getClass().getSimpleName();
@@ -67,9 +77,12 @@ public class MenuActivity extends AppCompatActivity {
     private Button mUploadObject;
     private Button mGetObject;
     private Button mConvertFile;
+    private Button mSaveFile;
+
 
     private byte[] plainText;
     private byte[] cipherText;
+    private byte[] test = "Sample Test File".getBytes();
 
     private byte[] aesKey;
 
@@ -78,8 +91,22 @@ public class MenuActivity extends AppCompatActivity {
     String objectID;
     TextView txt;
 
+    @RequiresApi(api = Build.VERSION_CODES.M)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        boolean needsRead = ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED;
+        if (needsRead) {
+            requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, 1);
+        }
+
+        boolean needsWrite = ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED;
+        if (needsWrite) {
+            requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
+        }
+
+
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_menu);
 
@@ -117,6 +144,7 @@ public class MenuActivity extends AppCompatActivity {
                 try {
                     final byte[] finalPlain = plainText.clone();
                     cipherText = SimpleCrypto.encrypt(aesKey, finalPlain);
+                    plainText = "stop".getBytes();
                     Log.i("Encrypt - Plain", SimpleCrypto.bytesToHex(plainText));
                     Log.i("Encrypt - Cipher", SimpleCrypto.bytesToHex(cipherText));
                     txt.setText("Plain: " + SimpleCrypto.bytesToHex(plainText) + "\nCipher: " + SimpleCrypto.bytesToHex(cipherText));
@@ -173,6 +201,14 @@ public class MenuActivity extends AppCompatActivity {
             public void onClick(View view) {
                 ProcessButton processButton = new ProcessButton();
                 processButton.execute(ServerAction.CONVERT_FILE);
+            }
+        });
+        mSaveFile = (Button)findViewById(R.id.saveFile);
+        mSaveFile.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                ProcessButton processButton = new ProcessButton();
+                processButton.execute(ServerAction.SAVE_FILE);
             }
         });
 
@@ -297,7 +333,7 @@ public class MenuActivity extends AppCompatActivity {
                 HttpResponse response;
                 HttpClient httpClient = new DefaultHttpClient();
                 HttpPost httpPost = new HttpPost("https://pp.848.productions/object/" + objectID);
-                httpPost.setEntity(new ByteArrayEntity(plainText));
+                httpPost.setEntity(new ByteArrayEntity(cipherText));
                 httpPost.setHeader("Content-Type", "application/json");
                 httpPost.setHeader("Accept-Encoding", "application/json");
                 httpPost.setHeader("Accept-Language", "en-US");
@@ -313,6 +349,7 @@ public class MenuActivity extends AppCompatActivity {
                 Log.d("GetToken Server Reply", responseServer);
 
                 Log.e("response", responseServer);
+                cipherText = "".getBytes();
 
             } catch (Exception e) {
                 e.printStackTrace();
@@ -343,14 +380,15 @@ public class MenuActivity extends AppCompatActivity {
 
                 response = httpClient.execute(httpGet);
                 Log.i("response", response.getStatusLine().getReasonPhrase());
-
-                InputStream inputStream = response.getEntity().getContent();
-                StringifyStream str = new StringifyStream();
-                responseServer = str.getStringFromInputStream(inputStream);
+                cipherText = EntityUtils.toByteArray(response.getEntity());
+//                InputStream inputStream = response.getEntity().getContent();
+//                StringifyStream str = new StringifyStream();
+//                responseServer = str.getStringFromInputStream(inputStream);
+                responseServer = cipherText.toString();
                 Log.d("GetToken Server Reply", responseServer);
                 //JSONObject replyJson = new JSONObject(responseServer);
                 //token = getHashCodeFromString(username + replyJson.getString("Nonce") + jsonObject.getString("foo"));
-
+//                cipherText = responseServer.getBytes();
                 Log.e("response", responseServer);
 
             } catch (Exception e) {
@@ -360,67 +398,43 @@ public class MenuActivity extends AppCompatActivity {
         }
 
         private String convertFile() {
-//            String baseDir = Environment.getExternalStorageDirectory().getAbsolutePath();
-//            String fileName = "file.txt";
-//            String path  = baseDir + "/your folder(s)/" + fileName;
-//
-//            String found = "true";
-//            //Find the directory for the SD Card using the API
-//            //*Don't* hardcode "/sdcard"
-////            File file = new File(getFilesDir() + "/" + "file.txt");
-//            //Get the text file
-            File file = new File("/storage/self/primary/file.txt");
-//
-//            int size = (int) file.length();
-//            byte[] bytes = new byte[size];
-//
-//            try {
-//                BufferedInputStream buf = new BufferedInputStream(new FileInputStream(file));
-//                buf.read(bytes, 0, bytes.length);
-//                buf.close();
-//            } catch (FileNotFoundException e) {
-//                // TODO Auto-generated catch block
-//                e.printStackTrace();
-//            } catch (IOException e) {
-//                // TODO Auto-generated catch block
-//                e.printStackTrace();
-//            }
-//
-//            if(new File("/storage/self/primary/file.txt").exists())
-//            {
-//                found = "yay";
-//            }
-//                String output = new String(bytes);
-//            String str = new String(bytes);
 
-            StringBuilder text = new StringBuilder();
+            final File file = new File(Environment.getExternalStorageDirectory().getAbsolutePath(), "file.txt");
+            int size = (int) file.length();
+            byte[] bytes = new byte[size];
+            try {
+                BufferedInputStream buf = new BufferedInputStream(new FileInputStream(file));
+                buf.read(bytes, 0, bytes.length);
+                buf.close();
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            plainText = bytes;
+            String rtn = new String();
+            return "";
+        }
+
+        private String saveFile() {
+
+            File file=new File(Environment.getExternalStorageDirectory(), "output.txt");
+            try {
+                file.createNewFile();
+            } catch (java.io.IOException e) {
+                Log.e("SaveFile", "Create new file", e);
+            }
 
             try {
-                BufferedReader br = new BufferedReader(new FileReader(file));
-                String line;
-
-                while ((line = br.readLine()) != null) {
-                    text.append(line);
-                    text.append('\n');
-                    Log.i("Test", "text : "+text+" : end");
-                }
-                br.close();
+                FileOutputStream fos=new FileOutputStream(file.getPath());
+                fos.write(plainText);
+                fos.close();
             }
-            catch (IOException e) {
-                //You'll need to add proper error handling here
+            catch (java.io.IOException e) {
+                Log.e("saveFile", "Write to file", e);
             }
 
-
-
-            String str;
-
-            if(file.exists()) {
-                str = "Poop";
-            } else {
-                str = "nope";
-            }
-            Log.d("Text", ""+text);
-            return "text : "+text+" : end";
+            return "saved";
         }
 
 
@@ -435,7 +449,7 @@ public class MenuActivity extends AppCompatActivity {
             ServerAction action = params[0];
             String username = "user4321";
             String password = "pass4321";
-            String filename = "testfile2";
+            String filename = "sample14";
             int res = 9999;
 
             switch (action) {
@@ -457,6 +471,9 @@ public class MenuActivity extends AppCompatActivity {
                     break;
                 case CONVERT_FILE:
                     responseServer = convertFile();
+                    break;
+                case SAVE_FILE:
+                    responseServer = saveFile();
                     break;
                 default:
                     responseServer = "Action not registered";
