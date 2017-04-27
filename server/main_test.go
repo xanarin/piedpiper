@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha512"
 	"encoding/json"
 	"io/ioutil"
 	"log"
@@ -11,6 +12,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/boltdb/bolt"
 )
 
 func setup() {
@@ -90,6 +93,49 @@ func TestCreateConflictingUser(t *testing.T) {
 	}
 }
 
+func TestAuthUser(t *testing.T) {
+	// Create a request to pass to our handler.
+	createUserJSON := UserCreationJSON{Username: "authguy", Password: "foobar"}
+	buffer, err := json.Marshal(createUserJSON)
+	req, err := http.NewRequest("POST", "/user", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// We create a ResponseRecorder (which satisfies http.ResponseWriter) to record the response.
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(createUserHandler)
+
+	// Our handlers satisfy http.Handler, so we can call their ServeHTTP method
+	// directly and pass in our Request and ResponseRecorder.
+	handler.ServeHTTP(rr, req)
+
+	// Check the status code is what we expect.
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	// Auth the user
+	reqDateString := time.Now().UTC().Format("20060102150405")
+	authUserJSON := AuthUserRequestJSON{Username: "authguy", Password: "foobar", ReqDate: reqDateString}
+	buffer, err = json.Marshal(authUserJSON)
+	req, err = http.NewRequest("GET", "/auth", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr = httptest.NewRecorder()
+	authHandler := http.HandlerFunc(authUserHandler)
+	authHandler.ServeHTTP(rr, req)
+
+	// Check the status code is what we expect.
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("auth handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+}
+
 func TestPutGetObjectValid(t *testing.T) {
 	// Create user for this test
 	createUserJSON := UserCreationJSON{Username: "#TheRealUploader", Password: "foobar"}
@@ -108,8 +154,40 @@ func TestPutGetObjectValid(t *testing.T) {
 			status, http.StatusOK)
 	}
 
+	// Auth the user
+	reqDateString := time.Now().UTC().Format("20060102150405")
+	authUserJSON := AuthUserRequestJSON{Username: "#TheRealUploader", Password: "foobar", ReqDate: reqDateString}
+	buffer, err = json.Marshal(authUserJSON)
+	req, err = http.NewRequest("GET", "/auth", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr = httptest.NewRecorder()
+	authHandler := http.HandlerFunc(authUserHandler)
+	authHandler.ServeHTTP(rr, req)
+
+	// Check the status code is what we expect.
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("auth handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	// Get response JSON
+	response := AuthUserResponseJSON{}
+	err = json.NewDecoder(rr.Body).Decode(&response)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Calculate hash
+	hashInput := []byte("#TheRealUploader")
+	hashInput = append(hashInput, response.Nonce...)
+	hashInput = append(hashInput, []byte(response.ExpirationDate)...)
+	tokenBytes := sha512.Sum512(hashInput)
+
 	// Create a new object in the database
-	createObjectJSON := CreateObjectRequestJSON{Username: "#TheRealUploader", FileName: "rando239487246char.txt"}
+	createObjectJSON := CreateObjectRequestJSON{Token: tokenBytes[:], FileName: "rando239487246char.txt"}
 	buffer, err = json.Marshal(createObjectJSON)
 	req, err = http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
 	if err != nil {
@@ -131,7 +209,7 @@ func TestPutGetObjectValid(t *testing.T) {
 	}
 
 	// Upload file to database
-	data := []byte("I am a test file! (not really, but don't tell anyone!")
+	data := []byte("I am a test file! (not really, but don't tell anyone)!")
 	req, err = http.NewRequest("POST", "/object/"+strconv.Itoa(uploadID)+"/", bytes.NewBuffer(data))
 	if err != nil {
 		t.Fatal(err)
@@ -146,7 +224,7 @@ func TestPutGetObjectValid(t *testing.T) {
 	}
 
 	// Get object back from database
-	getObjectJSON := GetObjectRequestJSON{Username: "#TheRealUploader", FileName: "rando239487246char.txt"}
+	getObjectJSON := GetObjectRequestJSON{Token: tokenBytes[:], FileName: "rando239487246char.txt"}
 	buffer, err = json.Marshal(getObjectJSON)
 	req, err = http.NewRequest("GET", "/object", bytes.NewBuffer(buffer))
 	if err != nil {
@@ -157,9 +235,33 @@ func TestPutGetObjectValid(t *testing.T) {
 	getObjectRunner := http.HandlerFunc(getObjectHandler)
 	getObjectRunner.ServeHTTP(rr, req)
 
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("user creator handler returned wrong status code: got %v want %v",
+	status := rr.Code
+	if status != http.StatusOK {
+		t.Errorf("object get handler returned wrong status code: got %v want %v",
 			status, http.StatusOK)
+	}
+
+	if status == http.StatusNotFound {
+		MainDB.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("objects"))
+			log.Printf("Dumping object bucket")
+			return b.ForEach(func(k, v []byte) error {
+				object := Object{}
+				json.Unmarshal(v, &object)
+				log.Printf("%v: %v", k, object)
+				return nil
+			})
+		})
+		MainDB.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("users"))
+			log.Printf("Dumping users bucket")
+			return b.ForEach(func(k, v []byte) error {
+				object := User{}
+				json.Unmarshal(v, &object)
+				log.Printf("%v: %v", k, object.ObjectIDs)
+				return nil
+			})
+		})
 	}
 
 	bs, err := ioutil.ReadAll(rr.Body)
@@ -195,8 +297,40 @@ func TestCreateObjectValid(t *testing.T) {
 			status, http.StatusOK)
 	}
 
+	// Auth the user
+	reqDateString := time.Now().UTC().Format("20060102150405")
+	authUserJSON := AuthUserRequestJSON{Username: "happyUploader", Password: "foobar", ReqDate: reqDateString}
+	buffer, err = json.Marshal(authUserJSON)
+	req, err = http.NewRequest("GET", "/auth", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr = httptest.NewRecorder()
+	authHandler := http.HandlerFunc(authUserHandler)
+	authHandler.ServeHTTP(rr, req)
+
+	// Check the status code is what we expect.
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("auth handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	// Get response JSON
+	response := AuthUserResponseJSON{}
+	err = json.NewDecoder(rr.Body).Decode(&response)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Calculate hash
+	hashInput := []byte("happyUploader")
+	hashInput = append(hashInput, response.Nonce...)
+	hashInput = append(hashInput, []byte(response.ExpirationDate)...)
+	tokenBytes := sha512.Sum512(hashInput)
+
 	// Create a request to pass to our handler.
-	createObjectJSON := CreateObjectRequestJSON{Username: "happyUploader", FileName: "foo.txt"}
+	createObjectJSON := CreateObjectRequestJSON{Token: tokenBytes[:], FileName: "foo.txt"}
 	buffer, err = json.Marshal(createObjectJSON)
 	req, err = http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
 	if err != nil {
@@ -213,8 +347,12 @@ func TestCreateObjectValid(t *testing.T) {
 
 	// Check the status code is what we expect.
 	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("user creator handler returned wrong status code: got %v want %v",
-			status, http.StatusOK)
+		bs, err := ioutil.ReadAll(rr.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Errorf("user creator handler returned wrong status code: got %v want %v.\n\tBody was: %v",
+			status, http.StatusOK, string(bs))
 	}
 
 	// Check the response body contains uploadSessionID
@@ -225,7 +363,7 @@ func TestCreateObjectValid(t *testing.T) {
 
 func TestCreateObjectInvalidOwner(t *testing.T) {
 	// Create a request to pass to our handler.
-	createObjectJSON := CreateObjectRequestJSON{Username: "InvalidUploader", FileName: "bar.txt"}
+	createObjectJSON := CreateObjectRequestJSON{Token: []byte("this is not a valid token!!"), FileName: "bar.txt"}
 	buffer, err := json.Marshal(createObjectJSON)
 	req, err := http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
 	if err != nil {
@@ -265,8 +403,40 @@ func TestCreateGetObjectWithoutUpload(t *testing.T) {
 			status, http.StatusOK)
 	}
 
+	// Auth the user
+	reqDateString := time.Now().UTC().Format("20060102150405")
+	authUserJSON := AuthUserRequestJSON{Username: "SetGetGuy", Password: "foobar", ReqDate: reqDateString}
+	buffer, err = json.Marshal(authUserJSON)
+	req, err = http.NewRequest("GET", "/auth", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr = httptest.NewRecorder()
+	authHandler := http.HandlerFunc(authUserHandler)
+	authHandler.ServeHTTP(rr, req)
+
+	// Check the status code is what we expect.
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("auth handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	// Get response JSON
+	response := AuthUserResponseJSON{}
+	err = json.NewDecoder(rr.Body).Decode(&response)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Calculate hash
+	hashInput := []byte("SetGetGuy")
+	hashInput = append(hashInput, response.Nonce...)
+	hashInput = append(hashInput, []byte(response.ExpirationDate)...)
+	tokenBytes := sha512.Sum512(hashInput)
+
 	// Create a new object in the database
-	createObjectJSON := CreateObjectRequestJSON{Username: "SetGetGuy", FileName: "rando239487246char.txt"}
+	createObjectJSON := CreateObjectRequestJSON{Token: tokenBytes[:], FileName: "rando239487246char.txt"}
 	buffer, err = json.Marshal(createObjectJSON)
 	req, err = http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
 	if err != nil {
@@ -283,7 +453,7 @@ func TestCreateGetObjectWithoutUpload(t *testing.T) {
 	}
 
 	// Get object back from database
-	getObjectJSON := GetObjectRequestJSON{Username: "SetGetGuy", FileName: "rando239487246char.txt"}
+	getObjectJSON := GetObjectRequestJSON{Token: tokenBytes[:], FileName: "rando239487246char.txt"}
 	buffer, err = json.Marshal(getObjectJSON)
 	req, err = http.NewRequest("GET", "/object", bytes.NewBuffer(buffer))
 	if err != nil {
@@ -297,66 +467,6 @@ func TestCreateGetObjectWithoutUpload(t *testing.T) {
 	if status := rr.Code; status != http.StatusPreconditionFailed {
 		t.Errorf("user creator handler returned wrong status code: got %v want %v",
 			status, http.StatusOK)
-	}
-}
-
-func TestCreateGetObjectBadOwner(t *testing.T) {
-	// Create user for this test
-	createUserJSON := UserCreationJSON{Username: "BadOwner1", Password: "foobar"}
-	buffer, err := json.Marshal(createUserJSON)
-	req, err := http.NewRequest("POST", "/user", bytes.NewBuffer(buffer))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(createUserHandler)
-	handler.ServeHTTP(rr, req)
-
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("user creator handler returned wrong status code: got %v want %v",
-			status, http.StatusOK)
-	}
-
-	// Create a new object in the database
-	createObjectJSON := CreateObjectRequestJSON{Username: "BadOwner1", FileName: "rando239487246char.txt"}
-	buffer, err = json.Marshal(createObjectJSON)
-	req, err = http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rr = httptest.NewRecorder()
-	createObjectRunner := http.HandlerFunc(createObjectHandler)
-	createObjectRunner.ServeHTTP(rr, req)
-
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("user creator handler returned wrong status code: got %v want %v",
-			status, http.StatusOK)
-	}
-
-	// Get object back from database (but we're requesting from a user that doesn't exist)
-	getObjectJSON := GetObjectRequestJSON{Username: "BadOwnerInvalid", FileName: "rando239487246char.txt"}
-	buffer, err = json.Marshal(getObjectJSON)
-	req, err = http.NewRequest("GET", "/object", bytes.NewBuffer(buffer))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rr = httptest.NewRecorder()
-	getObjectRunner := http.HandlerFunc(getObjectHandler)
-	getObjectRunner.ServeHTTP(rr, req)
-
-	if status := rr.Code; status != http.StatusNotFound {
-		t.Errorf("user creator handler returned wrong status code: got %v want %v",
-			status, http.StatusNotFound)
-	}
-
-	// Check the response body is what we expect.
-	expected := `User BadOwnerInvalid is not a registered user`
-	if rr.Body.String() != expected {
-		t.Errorf("handler returned unexpected body: got %v want %v",
-			rr.Body.String(), expected)
 	}
 }
 
@@ -378,8 +488,40 @@ func TestCreateGetObjectBadFileName(t *testing.T) {
 			status, http.StatusOK)
 	}
 
+	// Auth the user
+	reqDateString := time.Now().UTC().Format("20060102150405")
+	authUserJSON := AuthUserRequestJSON{Username: "BadOwner2", Password: "foobar", ReqDate: reqDateString}
+	buffer, err = json.Marshal(authUserJSON)
+	req, err = http.NewRequest("GET", "/auth", bytes.NewBuffer(buffer))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr = httptest.NewRecorder()
+	authHandler := http.HandlerFunc(authUserHandler)
+	authHandler.ServeHTTP(rr, req)
+
+	// Check the status code is what we expect.
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("auth handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	// Get response JSON
+	response := AuthUserResponseJSON{}
+	err = json.NewDecoder(rr.Body).Decode(&response)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Calculate hash
+	hashInput := []byte("BadOwner2")
+	hashInput = append(hashInput, response.Nonce...)
+	hashInput = append(hashInput, []byte(response.ExpirationDate)...)
+	tokenBytes := sha512.Sum512(hashInput)
+
 	// Get object back from database (but we're requesting an object that doesn't exist)
-	getObjectJSON := GetObjectRequestJSON{Username: "BadOwner2", FileName: "11.txt"}
+	getObjectJSON := GetObjectRequestJSON{Token: tokenBytes[:], FileName: "11.txt"}
 	buffer, err = json.Marshal(getObjectJSON)
 	req, err = http.NewRequest("GET", "/object", bytes.NewBuffer(buffer))
 	if err != nil {
@@ -403,7 +545,7 @@ func TestCreateGetObjectBadFileName(t *testing.T) {
 	}
 }
 
-func TestAuthUser(t *testing.T) {
+func TestAuthUserAgain(t *testing.T) {
 	// Create user for this test
 	createUserJSON := UserCreationJSON{Username: "Authenticator", Password: "password"}
 	buffer, err := json.Marshal(createUserJSON)
@@ -425,7 +567,7 @@ func TestAuthUser(t *testing.T) {
 	authUserJSON := AuthUserRequestJSON{
 		Username: "Authenticator",
 		Password: "password",
-		Foo:      time.Now().UTC().Format("20060102150405"),
+		ReqDate:  time.Now().UTC().Format("20060102150405"),
 	}
 	buffer, err = json.Marshal(authUserJSON)
 	if err != nil {
@@ -445,7 +587,7 @@ func TestAuthUser(t *testing.T) {
 			status, http.StatusOK)
 	}
 
-	// Check the response body contains uploadSessionID
+	// Check the response JSON
 	response := AuthUserResponseJSON{}
 	err = json.NewDecoder(rr.Body).Decode(&response)
 	if err != nil {
@@ -489,7 +631,7 @@ func TestAuthUserBadPassword(t *testing.T) {
 	authUserJSON := AuthUserRequestJSON{
 		Username: "badauthguy",
 		Password: "password2", // Note: Not the password that was given during registration
-		Foo:      time.Now().UTC().Format("20060102150405"),
+		ReqDate:  time.Now().UTC().Format("20060102150405"),
 	}
 	buffer, err = json.Marshal(authUserJSON)
 	if err != nil {
@@ -539,7 +681,7 @@ func TestAuthUserReplayAttack(t *testing.T) {
 	authUserJSON := AuthUserRequestJSON{
 		Username: "naiveuser",
 		Password: "verysecurepassword", // Note: Not the password that was given during registration
-		Foo:      badTimeStamp,
+		ReqDate:  badTimeStamp,
 	}
 	buffer, err = json.Marshal(authUserJSON)
 	if err != nil {

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/sha512"
 	"encoding/binary"
 	"encoding/json"
 	"flag"
@@ -34,12 +35,12 @@ type ErrorResponse struct {
 }
 
 type GetObjectRequestJSON struct {
-	Username string `json: "username"`
+	Token    []byte `json: "token"`
 	FileName string `json: "filename"`
 }
 
 type CreateObjectRequestJSON struct {
-	Username string `json: "username"`
+	Token    []byte `json: "token"`
 	FileName string `json: "filename"`
 }
 
@@ -78,11 +79,59 @@ type UploadSession struct {
 	Object Object `json: "object"`
 }
 
+type Token struct {
+	Token          []byte `json: "token"`
+	User           User   `json: "user"`
+	ExpirationDate string `json: "expirationdate"`
+}
+
 // itob returns an 8-byte big endian representation of v.
 func itob(v int) []byte {
 	b := make([]byte, 8)
 	binary.BigEndian.PutUint64(b, uint64(v))
 	return b
+}
+
+func checkToken(token []byte) (*Token, error) {
+	// Find token in database, if it exists
+	var tokenData []byte
+
+	err := MainDB.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("tokens"))
+		tokenData = b.Get(token)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if tokenData == nil {
+		return nil, nil
+	}
+
+	tokenObject := Token{}
+	err = json.Unmarshal(tokenData, &tokenObject)
+	if err != nil {
+		return nil, err
+	}
+
+	return &tokenObject, nil
+}
+
+func checkTokenExpired(token Token) bool {
+	tokenExpDate, err := time.Parse("20060102150405", token.ExpirationDate)
+	if err != nil {
+		log.Panicf("Failed to parse timestamp from our own token: %v", err)
+	}
+
+	timeDelta := tokenExpDate.Sub(time.Now().UTC())
+	if timeDelta.Hours() < 0.0 {
+		return false
+	} else if timeDelta.Hours() > 144.0 {
+		log.Printf("WARNING: Time has moved backwards. Current time: %s. Token Expiration: %s", time.Now().UTC(), tokenExpDate)
+		return false
+	}
+
+	return true
 }
 
 func getObjectHandler(res http.ResponseWriter, req *http.Request) {
@@ -94,28 +143,53 @@ func getObjectHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Confirm that owner exists
-	var userData []byte
-	requestedKey := []byte(requestJSON.Username)
-	MainDB.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("users"))
-		userData = b.Get(requestedKey)
-		return nil
-	})
-	if userData == nil {
-		log.Printf("Tried to use uninitialized user '%v'", requestJSON.Username)
-		res.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(res, "User %v is not a registered user", requestJSON.Username)
+	// Check and validate token
+	token, err := checkToken(requestJSON.Token)
+	if err != nil {
+		res.WriteHeader(http.StatusInternalServerError)
+		log.Printf("Error retrieving token from datastore: %v", err)
 		return
 	}
 
-	ownerObject := User{}
-	err = json.Unmarshal(userData, &ownerObject)
-	if err != nil {
-		res.WriteHeader(http.StatusInternalServerError)
-		log.Printf("Error unmarshalling owner object from database. %v", err)
+	if token == nil {
+		log.Printf("Tried to use invalid token: %s", requestJSON.Token)
+		res.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(res, "Token '%v' is not a valid token", requestJSON.Token)
 		return
 	}
+
+	// Check if token is expired
+	if !checkTokenExpired(*token) {
+		log.Printf("Expired token presented for user %v.\n\tToken Expired at: %s\n\tCurrent Time: %s", token.User.Username, token.ExpirationDate, time.Now().UTC())
+		res.WriteHeader(http.StatusPreconditionFailed)
+		fmt.Fprintf(res, "Token is expired.")
+
+		// If token is expired, remove it from database
+		err = MainDB.Update(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("tokens"))
+			return b.Delete(token.Token)
+		})
+
+		// Sorry for putting an error handler in an error handler
+		if err != nil {
+			log.Printf("Failed to remove expired token from the datastore: %v", err)
+			res.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(res, "")
+			return
+		}
+		return
+	}
+
+	// Get user from database
+	var existingUser []byte
+	requestedKey := []byte(token.User.Username)
+	MainDB.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("users"))
+		existingUser = b.Get(requestedKey)
+		return nil
+	})
+	ownerObject := User{}
+	err = json.Unmarshal(existingUser, &ownerObject)
 
 	// Get object from database (using owner's own index)
 	var finalObject *Object
@@ -145,7 +219,7 @@ func getObjectHandler(res http.ResponseWriter, req *http.Request) {
 
 	if finalObject == nil {
 		res.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(res, "Failed to find object with filename %v belonging to user %v", requestJSON.FileName, requestJSON.Username)
+		fmt.Fprintf(res, "Failed to find object with filename %v belonging to user %v", requestJSON.FileName, ownerObject.Username)
 		return
 	}
 
@@ -170,17 +244,40 @@ func createObjectHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Confirm that owner exists
-	var existingUser []byte
-	requestedKey := []byte(requestJSON.Username)
-	MainDB.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("users"))
-		existingUser = b.Get(requestedKey)
-		return nil
-	})
-	if existingUser == nil {
+	// Check and validate token
+	token, err := checkToken(requestJSON.Token)
+	if err != nil {
+		res.WriteHeader(http.StatusInternalServerError)
+		log.Printf("Error retrieving token from datastore: %v", err)
+		return
+	}
+
+	if token == nil {
+		log.Printf("Tried to use invalid token: '%v'", requestJSON.Token)
 		res.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(res, "User %v is not a registered user", requestJSON.Username)
+		fmt.Fprintf(res, "Token '%v' is not a valid token", requestJSON.Token)
+		return
+	}
+
+	// Check if token is expired
+	if !checkTokenExpired(*token) {
+		log.Printf("Expired token presented for user %v.\n\tToken Expired at: %s\n\tCurrent Time: %s", token.User.Username, token.ExpirationDate, time.Now().UTC())
+		res.WriteHeader(http.StatusPreconditionFailed)
+		fmt.Fprintf(res, "Token is expired.")
+
+		// If token is expired, remove it from database
+		err = MainDB.Update(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("tokens"))
+			return b.Delete(token.Token)
+		})
+
+		// Sorry for putting an error handler in an error handler
+		if err != nil {
+			log.Printf("Failed to remove expired token from the datastore: %v", err)
+			res.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(res, "")
+			return
+		}
 		return
 	}
 
@@ -198,7 +295,7 @@ func createObjectHandler(res http.ResponseWriter, req *http.Request) {
 
 	newObject := Object{
 		Name:          requestJSON.FileName,
-		Owner:         requestJSON.Username,
+		Owner:         token.User.Username,
 		LocalFileName: randomFileName,
 	}
 
@@ -220,6 +317,7 @@ func createObjectHandler(res http.ResponseWriter, req *http.Request) {
 		// Persist bytes to users bucket.
 		return b.Put(itob(newObject.ID), buf)
 	})
+
 	if err != nil {
 		res.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(res, "Error adding object to database.")
@@ -498,6 +596,39 @@ func authUserHandler(res http.ResponseWriter, req *http.Request) {
 
 	res.Header().Set("Content-Type", "application/json")
 	res.Write(responseData)
+
+	// Write token into database with user and timestamp for expiration
+
+	// Create hash
+	hashInput := []byte(userObject.Username)
+	hashInput = append(hashInput, nonce[:]...)
+	hashInput = append(hashInput, []byte(expDateString)...)
+	tokenBytes := sha512.Sum512(hashInput)
+
+	token := Token{
+		Token:          tokenBytes[:],
+		User:           userObject,
+		ExpirationDate: expDateString,
+	}
+
+	err = MainDB.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("tokens"))
+
+		// Marshal Object into bytes.
+		buf, err := json.Marshal(token)
+		if err != nil {
+			return err
+		}
+
+		// Persist bytes to users bucket.
+		return b.Put(token.Token, buf)
+	})
+	if err != nil {
+		res.WriteHeader(http.StatusInternalServerError)
+		log.Printf("Error storing token in database", err)
+		return
+	}
+
 }
 
 func initDB(dbfile string) error {
@@ -535,6 +666,17 @@ func initDB(dbfile string) error {
 
 	err = MainDB.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte("uploads"))
+		if err != nil {
+			return fmt.Errorf("Error creating bucket: %s", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	err = MainDB.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("tokens"))
 		if err != nil {
 			return fmt.Errorf("Error creating bucket: %s", err)
 		}
