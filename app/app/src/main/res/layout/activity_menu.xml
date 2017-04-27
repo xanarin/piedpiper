@@ -27,4 +27,53 @@
         android:gravity="center"
         android:text="Get Token" />
 
+    <android.support.v7.widget.AppCompatButton
+        android:id="@+id/convertFile"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="Convert File" />
+
+    <android.support.v7.widget.AppCompatButton
+        android:id="@+id/encrypt"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="Encrypt Data" />
+
+    <android.support.v7.widget.AppCompatButton
+        android:id="@+id/createObject"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="Create Object" />
+
+    <android.support.v7.widget.AppCompatButton
+        android:id="@+id/uploadObject"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="Upload Object" />
+
+    <android.support.v7.widget.AppCompatButton
+        android:id="@+id/getObject"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="Get Object" />
+
+    <android.support.v7.widget.AppCompatButton
+        android:id="@+id/decrypt"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="Decrypt Data" />
+
+    <android.support.v7.widget.AppCompatButton
+        android:id="@+id/saveFile"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="Save File" />
+
 </android.support.v7.widget.LinearLayoutCompat>
