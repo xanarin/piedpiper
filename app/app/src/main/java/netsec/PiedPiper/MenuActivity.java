@@ -255,7 +255,7 @@ public class MenuActivity extends AppCompatActivity {
 
                 HttpResponse response;
                 JSONObject jsonObject = new JSONObject();
-                jsonObject.accumulate("foo", dateFormatGmt.format(now));
+                jsonObject.accumulate("reqdate", dateFormatGmt.format(now));
                 jsonObject.accumulate("username", username);
                 jsonObject.accumulate("password", password);
                 json = jsonObject.toString();
@@ -274,7 +274,7 @@ public class MenuActivity extends AppCompatActivity {
                 responseServer = str.getStringFromInputStream(inputStream);
                 Log.d("GetToken Server Reply", responseServer);
                 JSONObject replyJson = new JSONObject(responseServer);
-                token = getHashCodeFromString(username + replyJson.getString("Nonce") + jsonObject.getString("foo"));
+                token = getHashCodeFromString(username + replyJson.getString("Nonce") + jsonObject.getString("reqdate"));
 
                 Log.e("response", responseServer);
 
