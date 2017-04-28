@@ -3,6 +3,7 @@ package netsec.PiedPiper;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.annotation.TargetApi;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.support.annotation.NonNull;
 import android.support.design.widget.Snackbar;
@@ -19,6 +20,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.ContactsContract;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -28,22 +30,35 @@ import android.widget.AutoCompleteTextView;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.json.JSONObject;
 
+import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
-
-
-import static android.Manifest.permission.READ_CONTACTS;
+import java.util.TimeZone;
 
 /**
  * A login screen that offers login via email/password.
  */
 public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<Cursor> {
 
-    /**
-     * Id to identity READ_CONTACTS permission request.
-     */
-    private static final int REQUEST_READ_CONTACTS = 0;
+
+    private static final String SHARED_PREF_FILE = "PiedPiperSettings";
+    private SharedPreferences sharedPreferences;
 
     /**
      * A dummy authentication store containing known user names and passwords.
@@ -67,9 +82,9 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
+        sharedPreferences=getSharedPreferences(SHARED_PREF_FILE,0);
         // Set up the login form.
         mEmailView = (AutoCompleteTextView) findViewById(R.id.email);
-        populateAutoComplete();
 
         mPasswordView = (EditText) findViewById(R.id.password);
         mPasswordView.setOnEditorActionListener(new TextView.OnEditorActionListener() {
@@ -94,50 +109,6 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
         mLoginFormView = findViewById(R.id.login_form);
         mProgressView = findViewById(R.id.login_progress);
     }
-
-    private void populateAutoComplete() {
-        if (!mayRequestContacts()) {
-            return;
-        }
-
-        getLoaderManager().initLoader(0, null, this);
-    }
-
-    private boolean mayRequestContacts() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            return true;
-        }
-        if (checkSelfPermission(READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
-            return true;
-        }
-        if (shouldShowRequestPermissionRationale(READ_CONTACTS)) {
-            Snackbar.make(mEmailView, R.string.permission_rationale, Snackbar.LENGTH_INDEFINITE)
-                    .setAction(android.R.string.ok, new View.OnClickListener() {
-                        @Override
-                        @TargetApi(Build.VERSION_CODES.M)
-                        public void onClick(View v) {
-                            requestPermissions(new String[]{READ_CONTACTS}, REQUEST_READ_CONTACTS);
-                        }
-                    });
-        } else {
-            requestPermissions(new String[]{READ_CONTACTS}, REQUEST_READ_CONTACTS);
-        }
-        return false;
-    }
-
-    /**
-     * Callback received when a permissions request has been completed.
-     */
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
-                                           @NonNull int[] grantResults) {
-        if (requestCode == REQUEST_READ_CONTACTS) {
-            if (grantResults.length == 1 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                populateAutoComplete();
-            }
-        }
-    }
-
 
     /**
      * Attempts to sign in or register the account specified by the login form.
@@ -254,24 +225,12 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
             emails.add(cursor.getString(ProfileQuery.ADDRESS));
             cursor.moveToNext();
         }
-
-        addEmailsToAutoComplete(emails);
     }
 
     @Override
     public void onLoaderReset(Loader<Cursor> cursorLoader) {
 
     }
-
-    private void addEmailsToAutoComplete(List<String> emailAddressCollection) {
-        //Create adapter to tell the AutoCompleteTextView what to show in its dropdown list.
-        ArrayAdapter<String> adapter =
-                new ArrayAdapter<>(LoginActivity.this,
-                        android.R.layout.simple_dropdown_item_1line, emailAddressCollection);
-
-        mEmailView.setAdapter(adapter);
-    }
-
 
     private interface ProfileQuery {
         String[] PROJECTION = {
@@ -289,34 +248,129 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
      */
     public class UserLoginTask extends AsyncTask<Void, Void, Boolean> {
 
+
         private final String mEmail;
         private final String mPassword;
+
+        private String responseServer;
+        private String token;
 
         UserLoginTask(String email, String password) {
             mEmail = email;
             mPassword = password;
         }
 
+        private String userRegister(String user, String pass) {
+            HttpURLConnection urlConnection=null;
+            String json = null;
+            String reply = null;
+            try {
+                //Create User
+
+                HttpResponse response;
+                JSONObject jsonObject = new JSONObject();
+                jsonObject.accumulate("username", user);
+                jsonObject.accumulate("password", pass);
+                json = jsonObject.toString();
+                HttpClient httpClient = new DefaultHttpClient();
+                HttpPost httpPost = new HttpPost("https://pp.848.productions/user");
+                httpPost.setEntity(new StringEntity(json, "UTF-8"));
+                httpPost.setHeader("Content-Type", "application/json");
+                httpPost.setHeader("Accept-Encoding", "application/json");
+                httpPost.setHeader("Accept-Language", "en-US");
+                response = httpClient.execute(httpPost);
+                InputStream inputStream = response.getEntity().getContent();
+                MenuActivity.StringifyStream str = new MenuActivity.StringifyStream();
+                reply = str.getStringFromInputStream(inputStream);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return reply;
+        }
+
+        private boolean requestToken(String username, String password) {
+            HttpURLConnection urlConnection=null;
+            String json = null;
+            String reply = null;
+            try {
+                SimpleDateFormat dateFormatGmt = new SimpleDateFormat("yyyyMMddHHmmss");
+                dateFormatGmt.setTimeZone(TimeZone.getTimeZone("GMT"));
+                Date now = new Date();
+
+                HttpResponse response;
+                JSONObject jsonObject = new JSONObject();
+                jsonObject.accumulate("reqdate", dateFormatGmt.format(now));
+                jsonObject.accumulate("username", username);
+                jsonObject.accumulate("password", password);
+                json = jsonObject.toString();
+                Log.i("getting:", json);
+                HttpClient httpClient = new DefaultHttpClient();
+                HttpPost httpPost = new HttpPost("https://pp.848.productions/auth");
+                httpPost.setEntity(new StringEntity(json, "UTF-8"));
+                httpPost.setHeader("Content-Type", "application/json");
+                httpPost.setHeader("Accept-Encoding", "application/json");
+                httpPost.setHeader("Accept-Language", "en-US");
+                response = httpClient.execute(httpPost);
+                Log.i("response", response.getStatusLine().getReasonPhrase());
+
+                InputStream inputStream = response.getEntity().getContent();
+                MenuActivity.StringifyStream str = new MenuActivity.StringifyStream();
+                responseServer = str.getStringFromInputStream(inputStream);
+                Log.d("GetToken Server Reply", responseServer);
+                JSONObject replyJson = new JSONObject(responseServer);
+                token = getHashCodeFromString(username + replyJson.getString("Nonce") + jsonObject.getString("reqdate"));
+
+                sharedPreferences=getSharedPreferences(SHARED_PREF_FILE,0);
+                SharedPreferences.Editor editor=sharedPreferences.edit();
+                editor.putString("username",username);
+                editor.putString("token",token);
+                editor.putString("expdate",replyJson.getString("ExpirationDate"));
+                editor.commit();
+
+                Log.e("response", responseServer);
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                return false;
+            }
+            return true;
+        }
+
+        private String getHashCodeFromString(String str) throws NoSuchAlgorithmException {
+            MessageDigest md = MessageDigest.getInstance("SHA-512");
+            md.update(str.getBytes());
+            byte byteData[] = md.digest();
+
+            //convert the byte to hex format method 1
+            StringBuffer hashCodeBuffer = new StringBuffer();
+            for (int i = 0; i < byteData.length; i++) {
+                hashCodeBuffer.append(Integer.toString((byteData[i] & 0xff) + 0x100, 16).substring(1));
+            }
+            return hashCodeBuffer.toString();
+        }
+
         @Override
         protected Boolean doInBackground(Void... params) {
-            // TODO: attempt authentication against a network service.
-
             try {
-                // Simulate network access.
-                Thread.sleep(2000);
-            } catch (InterruptedException e) {
+                if (userRegister(mEmail, mPassword).contains("username already exists")) {
+                    Log.i("Login", "User already exists");
+                } else {
+                    Log.i("Login", "User created");
+                }
+
+                if (requestToken(mEmail, mPassword)) {
+                    Log.i("Login", "Got token");
+                } else {
+                    Log.i("Login","Failed to get token");
+                    return false;
+                }
+
+
+            } catch (Exception e) {
+                e.printStackTrace();
                 return false;
             }
 
-            for (String credential : DUMMY_CREDENTIALS) {
-                String[] pieces = credential.split(":");
-                if (pieces[0].equals(mEmail)) {
-                    // Account exists, return true if the password matches.
-                    return pieces[1].equals(mPassword);
-                }
-            }
-
-            // TODO: register the new account here.
             return true;
         }
 
@@ -328,7 +382,7 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
             if (success) {
                 finish();
             } else {
-                mPasswordView.setError(getString(R.string.error_incorrect_password));
+                mPasswordView.setError("Error logging in or getting token.");
                 mPasswordView.requestFocus();
             }
         }

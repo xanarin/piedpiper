@@ -1,6 +1,7 @@
 package netsec.PiedPiper;
 
 import android.Manifest;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Environment;
@@ -12,40 +13,28 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.utils.URLEncodedUtils;
 import org.apache.http.entity.ByteArrayEntity;
-import org.apache.http.params.BasicHttpParams;
-import org.apache.http.params.HttpParams;
 import org.json.JSONObject;
 import android.os.AsyncTask;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.message.BasicNameValuePair;
 
 import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.LinkedList;
-import java.util.List;
 
 import java.net.HttpURLConnection;
 import java.util.TimeZone;
@@ -69,8 +58,8 @@ public class MenuActivity extends AppCompatActivity {
 
     private final String TAG = this.getClass().getSimpleName();
 
-    private Button mRegisterButton;
-    private Button mTokenButton;
+    private Button mUserButton;
+
     private Button mEncryptButton;
     private Button mDecryptButton;
     private Button mCreateObject;
@@ -87,7 +76,6 @@ public class MenuActivity extends AppCompatActivity {
     private byte[] aesKey;
 
     String responseServer;
-    String token;
     String objectID;
     TextView txt;
 
@@ -119,23 +107,16 @@ public class MenuActivity extends AppCompatActivity {
         plainText = "This is my plaintext".getBytes();
         cipherText = "".getBytes();
 
-        mRegisterButton = (Button)findViewById(R.id.userRegister);
-        mRegisterButton.setOnClickListener(new View.OnClickListener() {
+        mUserButton = (Button)findViewById(R.id.user);
+        mUserButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                ProcessButton processButton = new ProcessButton();
-                processButton.execute(ServerAction.USER_REGISTER);
+                Intent toLogin = new Intent(MenuActivity.this, LoginActivity.class);
+                startActivity(toLogin);
             }
         });
 
-        mTokenButton = (Button)findViewById(R.id.getToken);
-        mTokenButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                ProcessButton processButton = new ProcessButton();
-                processButton.execute(ServerAction.REQUEST_TOKEN);
-            }
-        });
+
 
         mEncryptButton = (Button)findViewById(R.id.encrypt);
         mEncryptButton.setOnClickListener(new View.OnClickListener() {
@@ -213,76 +194,51 @@ public class MenuActivity extends AppCompatActivity {
         });
 
     }
+
+    public static class StringifyStream {
+
+        public static void main(String[] args) throws IOException {
+            InputStream is = new ByteArrayInputStream("".getBytes());
+
+            String result = getStringFromInputStream(is);
+
+            System.out.println(result);
+            System.out.println("Done");
+
+        }
+
+        // convert InputStream to String
+        public static String getStringFromInputStream(InputStream is) {
+
+            BufferedReader b_reader = null;
+            StringBuilder s_builder = new StringBuilder();
+
+            String line;
+            try {
+                b_reader = new BufferedReader(new InputStreamReader(is));
+                while ((line = b_reader.readLine()) != null) {
+                    s_builder.append(line);
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                if (b_reader != null) {
+                    try {
+                        b_reader.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+            return s_builder.toString();
+        }
+
+    }
+
     /* Inner class to get response */
     class ProcessButton extends AsyncTask<ServerAction, Void, Void> {
 
-        private String userRegister(String user, String pass) {
-            HttpURLConnection urlConnection=null;
-            String json = null;
-            String reply = null;
-            try {
-                //Create User
 
-                HttpResponse response;
-                JSONObject jsonObject = new JSONObject();
-                jsonObject.accumulate("username", user);
-                jsonObject.accumulate("password", pass);
-                json = jsonObject.toString();
-                HttpClient httpClient = new DefaultHttpClient();
-                HttpPost httpPost = new HttpPost("https://pp.848.productions/user");
-                httpPost.setEntity(new StringEntity(json, "UTF-8"));
-                httpPost.setHeader("Content-Type", "application/json");
-                httpPost.setHeader("Accept-Encoding", "application/json");
-                httpPost.setHeader("Accept-Language", "en-US");
-                response = httpClient.execute(httpPost);
-                InputStream inputStream = response.getEntity().getContent();
-                StringifyStream str = new StringifyStream();
-                reply = str.getStringFromInputStream(inputStream);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            return reply;
-        }
-
-        private String requestToken(String username, String password) {
-            HttpURLConnection urlConnection=null;
-            String json = null;
-            String reply = null;
-            try {
-                SimpleDateFormat dateFormatGmt = new SimpleDateFormat("yyyyMMddHHmmss");
-                dateFormatGmt.setTimeZone(TimeZone.getTimeZone("GMT"));
-                Date now = new Date();
-
-                HttpResponse response;
-                JSONObject jsonObject = new JSONObject();
-                jsonObject.accumulate("reqdate", dateFormatGmt.format(now));
-                jsonObject.accumulate("username", username);
-                jsonObject.accumulate("password", password);
-                json = jsonObject.toString();
-                Log.i("getting:", json);
-                HttpClient httpClient = new DefaultHttpClient();
-                HttpPost httpPost = new HttpPost("https://pp.848.productions/auth");
-                httpPost.setEntity(new StringEntity(json, "UTF-8"));
-                httpPost.setHeader("Content-Type", "application/json");
-                httpPost.setHeader("Accept-Encoding", "application/json");
-                httpPost.setHeader("Accept-Language", "en-US");
-                response = httpClient.execute(httpPost);
-                Log.i("response", response.getStatusLine().getReasonPhrase());
-
-                InputStream inputStream = response.getEntity().getContent();
-                StringifyStream str = new StringifyStream();
-                responseServer = str.getStringFromInputStream(inputStream);
-                Log.d("GetToken Server Reply", responseServer);
-                JSONObject replyJson = new JSONObject(responseServer);
-                token = getHashCodeFromString(username + replyJson.getString("Nonce") + jsonObject.getString("reqdate"));
-
-                Log.e("response", responseServer);
-
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            return "Device Token: " + token;
-        }
 
         private String createObject(String token, String filename) {
             HttpURLConnection urlConnection=null;
@@ -453,12 +409,14 @@ public class MenuActivity extends AppCompatActivity {
             int res = 9999;
 
             switch (action) {
+                /*
                 case USER_REGISTER:
                     responseServer = userRegister(username, password);
                     break;
                 case REQUEST_TOKEN:
                     responseServer = requestToken(username, password);
                     break;
+                    */
                 case CREATE_OBJECT:
                     responseServer = createObject(username, filename);
                     break;
@@ -489,60 +447,6 @@ public class MenuActivity extends AppCompatActivity {
             txt.setText(responseServer);
         }
     }
-
-    public static class StringifyStream {
-
-        public static void main(String[] args) throws IOException {
-            InputStream is = new ByteArrayInputStream("".getBytes());
-
-            String result = getStringFromInputStream(is);
-
-            System.out.println(result);
-            System.out.println("Done");
-
-        }
-
-        // convert InputStream to String
-        private static String getStringFromInputStream(InputStream is) {
-
-            BufferedReader b_reader = null;
-            StringBuilder s_builder = new StringBuilder();
-
-            String line;
-            try {
-                b_reader = new BufferedReader(new InputStreamReader(is));
-                while ((line = b_reader.readLine()) != null) {
-                    s_builder.append(line);
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            } finally {
-                if (b_reader != null) {
-                    try {
-                        b_reader.close();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-            return s_builder.toString();
-        }
-
-    }
-
-    private static String getHashCodeFromString(String str) throws NoSuchAlgorithmException {
-        MessageDigest md = MessageDigest.getInstance("SHA-512");
-        md.update(str.getBytes());
-        byte byteData[] = md.digest();
-
-        //convert the byte to hex format method 1
-        StringBuffer hashCodeBuffer = new StringBuffer();
-        for (int i = 0; i < byteData.length; i++) {
-            hashCodeBuffer.append(Integer.toString((byteData[i] & 0xff) + 0x100, 16).substring(1));
-        }
-        return hashCodeBuffer.toString();
-    }
-
 
     @Override
     protected void onResume(){
