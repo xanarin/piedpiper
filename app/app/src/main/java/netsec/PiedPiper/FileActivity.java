@@ -10,8 +10,10 @@ import android.support.v7.app.AppCompatActivity;
 import android.text.InputType;
 import android.util.Log;
 import android.view.View;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.Spinner;
 import android.widget.TextView;
 
 import org.apache.http.HttpResponse;
@@ -26,19 +28,23 @@ import org.json.JSONObject;
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.TimeZone;
 
 public class FileActivity extends AppCompatActivity {
 
     private Button mChooseButton;
     private Button mUploadButton;
+    private Button mDownloadButton;
+    private Spinner _downloadSipnner;
     private TextView fileTxt;
 
     private static final String SHARED_PREF_FILE = "PiedPiperSettings";
@@ -46,7 +52,10 @@ public class FileActivity extends AppCompatActivity {
     private String _token;
     private String _username;
     private String _fileName;
+    private String _fileNameDown;
     private String _fullPath;
+    Set<String> _uploadedFiles;
+
 
     private byte[] _aesKey;
 
@@ -81,9 +90,17 @@ public class FileActivity extends AppCompatActivity {
         });
         builder.show();
 
+
         sharedPreferences=getSharedPreferences(SHARED_PREF_FILE,0);
         _token = sharedPreferences.getString("token","NO_TOKEN");
         _username = sharedPreferences.getString("username","NO_USERNAME");
+        _uploadedFiles = sharedPreferences.getStringSet("uploaded",new HashSet<String>());
+
+        _downloadSipnner = (Spinner) findViewById(R.id.downloadSelect);
+        ArrayList<String> downloadList = new ArrayList<String>();
+        downloadList.addAll(_uploadedFiles);
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, downloadList);
+        _downloadSipnner.setAdapter(adapter);
 
         fileTxt = (TextView) findViewById(R.id.textFileUp);
 
@@ -106,30 +123,19 @@ public class FileActivity extends AppCompatActivity {
         mUploadButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                // TODO THIS NEEDS TO HAPPEN IN ASYNC
                 UploadAsync uploadTask = new UploadAsync();
                 uploadTask.execute();
             }
         });
-        /*
-                case CREATE_OBJECT:
-                    responseServer = createObject(username, filename);
-                    break;
-                case UPLOAD_OBJECT:
-                    res = uploadObject(objectID);
-                    responseServer = "CODE " + res;
-                    break;
-                case GET_OBJECT:
-                    responseServer = getObject(username, filename);
-                    break;
-                case CONVERT_FILE:
-                    responseServer = convertFile();
-                    break;
-                case SAVE_FILE:
-                    responseServer = saveFile();
-                    break;
-         */
 
+        mDownloadButton = (Button)findViewById(R.id.buttonFileDownload);
+        mDownloadButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                DownloadAsync downloadTask = new DownloadAsync();
+                downloadTask.execute();
+            }
+        });
     }
     class UploadAsync extends AsyncTask<Void, Void, Void> {
 
@@ -160,11 +166,46 @@ public class FileActivity extends AppCompatActivity {
         @Override
         protected void onPostExecute(Void aVoid) {
             super.onPostExecute(aVoid);
-            // TODO
+            _uploadedFiles.add(_fileName);
+            sharedPreferences=getSharedPreferences(SHARED_PREF_FILE,0);
+            SharedPreferences.Editor editor=sharedPreferences.edit();
+            editor.putStringSet("uploaded",_uploadedFiles);
+            editor.commit();
+
             Log.i("UploadAsync","fin");
         }
     }
 
+
+
+    class DownloadAsync extends AsyncTask<Void, Void, Void> {
+
+        @Override
+        protected Void doInBackground(Void... params) {
+
+            Log.e("Entering *download* bg", "");
+
+            try {
+                byte[] cipherText = getObject(_token, _fileNameDown);
+                Log.i("Downed","wo");
+                byte[] plainText = SimpleCrypto.decrypt(_aesKey, cipherText);
+                Log.i("Decrypted","wo");
+                saveFile(plainText, _fileNameDown);
+                Log.i("Saved","wo");
+            }
+            catch (Exception e) {
+                Log.e("Download", "write to file or decrypt", e);
+            }
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void aVoid) {
+            super.onPostExecute(aVoid);
+            // TODO
+            Log.i("DownloadAsync","fin");
+        }
+    }
 
     private String createObject(String token, String filename) {
         String responseServer= "";
@@ -241,12 +282,13 @@ public class FileActivity extends AppCompatActivity {
         return responseCode;
     }
 
-    private String getObject(String username, String filename) {
+    private byte[] getObject(String token, String filename) {
         String responseServer = "";
 
         HttpURLConnection urlConnection=null;
         String json = null;
         String reply = null;
+        byte[] cipherText = null;
         try {
             SimpleDateFormat dateFormatGmt = new SimpleDateFormat("yyyyMMddHHmmss");
             dateFormatGmt.setTimeZone(TimeZone.getTimeZone("GMT"));
@@ -254,7 +296,7 @@ public class FileActivity extends AppCompatActivity {
 
             HttpResponse response;
             JSONObject jsonObject = new JSONObject();
-            jsonObject.accumulate("username", username);
+            jsonObject.accumulate("token", token);
             jsonObject.accumulate("filename", filename);
             json = jsonObject.toString();
             Log.i("getting:", json);
@@ -266,8 +308,7 @@ public class FileActivity extends AppCompatActivity {
 
             response = httpClient.execute(httpGet);
             Log.i("response", response.getStatusLine().getReasonPhrase());
-            // TODO
-            byte[] cipherText = EntityUtils.toByteArray(response.getEntity());
+            cipherText = EntityUtils.toByteArray(response.getEntity());
 //                InputStream inputStream = response.getEntity().getContent();
 //                StringifyStream str = new StringifyStream();
 //                responseServer = str.getStringFromInputStream(inputStream);
@@ -281,7 +322,7 @@ public class FileActivity extends AppCompatActivity {
         } catch (Exception e) {
             e.printStackTrace();
         }
-        return responseServer;
+        return cipherText;
     }
 
     private String convertFile() {
@@ -304,18 +345,16 @@ public class FileActivity extends AppCompatActivity {
         return responseServer;
     }
 
-    private String saveFile() {
+    private String saveFile(byte[] plainText, String filename) {
 
-        File file=new File(Environment.getExternalStorageDirectory(), "output.txt");
+        File file=new File(Environment.getExternalStorageDirectory(), filename);
         try {
             file.createNewFile();
         } catch (java.io.IOException e) {
-            Log.e("SaveFile", "Create new file", e);
+            Log.e("SaveFile", file.getAbsolutePath(), e);
         }
 
         try {
-            byte[] plainText = {};
-            //TODO ^^^^
             FileOutputStream fos=new FileOutputStream(file.getPath());
             fos.write(plainText);
             fos.close();

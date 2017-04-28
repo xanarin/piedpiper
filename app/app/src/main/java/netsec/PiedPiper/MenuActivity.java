@@ -2,6 +2,7 @@ package netsec.PiedPiper;
 
 import android.Manifest;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Environment;
@@ -33,6 +34,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
@@ -58,27 +60,12 @@ public class MenuActivity extends AppCompatActivity {
 
     private final String TAG = this.getClass().getSimpleName();
 
+    private static final String SHARED_PREF_FILE = "PiedPiperSettings";
+    private SharedPreferences sharedPreferences;
+
     private Button mUserButton;
     private Button mFileButton;
-
-    private Button mEncryptButton;
-    private Button mDecryptButton;
-    private Button mCreateObject;
-    private Button mUploadObject;
-    private Button mGetObject;
-    private Button mConvertFile;
-    private Button mSaveFile;
-
-
-    private byte[] plainText;
-    private byte[] cipherText;
-    private byte[] test = "Sample Test File".getBytes();
-
-    private byte[] aesKey;
-
-    String responseServer;
-    String objectID;
-    TextView txt;
+    private TextView txt;
 
     @RequiresApi(api = Build.VERSION_CODES.M)
     @Override
@@ -95,11 +82,30 @@ public class MenuActivity extends AppCompatActivity {
             requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
         }
 
-
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_menu);
+        sharedPreferences=getSharedPreferences(SHARED_PREF_FILE,0);
 
         txt = (TextView) findViewById(R.id.text);
+        String expDate = sharedPreferences.getString("expdate","_NO_DATE_");
+        if (expDate.equals("_NO_DATE_")) {
+            txt.setText("No device token; Please login or register.");
+        }else {
+            SimpleDateFormat dateFormatGmt = new SimpleDateFormat("yyyyMMddHHmmss");
+
+            dateFormatGmt.setTimeZone(TimeZone.getTimeZone("GMT"));
+            try {
+                Date expTime = dateFormatGmt.parse(expDate);
+                Date now = new Date();
+                if ( expTime.before(now) ) {
+                    txt.setText("Device token expired. Please log in again.");
+                } else {
+                    txt.setText("Device Successfully Logged in.");
+                }
+            } catch (ParseException e) {
+                txt.setText("Error parsing token expiration. Please reset application");
+            }
+        }
 
         mUserButton = (Button)findViewById(R.id.user);
         mUserButton.setOnClickListener(new View.OnClickListener() {
@@ -119,84 +125,6 @@ public class MenuActivity extends AppCompatActivity {
                 startActivity(toFile);
             }
         });
-
-
-        /*
-        mEncryptButton = (Button)findViewById(R.id.encrypt);
-        mEncryptButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                try {
-                    final byte[] finalPlain = plainText.clone();
-                    cipherText = SimpleCrypto.encrypt(aesKey, finalPlain);
-                    plainText = "stop".getBytes();
-                    Log.i("Encrypt - Plain", SimpleCrypto.bytesToHex(plainText));
-                    Log.i("Encrypt - Cipher", SimpleCrypto.bytesToHex(cipherText));
-                    txt.setText("Plain: " + SimpleCrypto.bytesToHex(plainText) + "\nCipher: " + SimpleCrypto.bytesToHex(cipherText));
-
-                } catch (Exception e) {
-                    Log.e("Encrypt", e.toString());
-                }
-            }
-        });
-        mDecryptButton = (Button)findViewById(R.id.decrypt);
-        mDecryptButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                try {
-                    final byte[] finalCipher = cipherText.clone();
-                    plainText = SimpleCrypto.decrypt(aesKey, finalCipher);
-                    Log.i("Decrypt - Cipher", SimpleCrypto.bytesToHex(cipherText));
-                    Log.i("Decrypt - Plain", SimpleCrypto.bytesToHex(plainText));
-                    txt.setText("Cipher: " + SimpleCrypto.bytesToHex(cipherText) + "\nPlain: " + SimpleCrypto.bytesToHex(plainText));
-
-                } catch (Exception e) {
-                    Log.e("Decrypt", e.toString());
-                }
-            }
-        });
-        mCreateObject = (Button)findViewById(R.id.createObject);
-        mCreateObject.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                ProcessButton processButton = new ProcessButton();
-                processButton.execute(ServerAction.CREATE_OBJECT);
-            }
-        });
-        mUploadObject = (Button)findViewById(R.id.uploadObject);
-        mUploadObject.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                ProcessButton processButton = new ProcessButton();
-                processButton.execute(ServerAction.UPLOAD_OBJECT);
-            }
-        });
-        mGetObject = (Button)findViewById(R.id.getObject);
-        mGetObject.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                ProcessButton processButton = new ProcessButton();
-                processButton.execute(ServerAction.GET_OBJECT);
-            }
-        });
-
-        mConvertFile = (Button)findViewById(R.id.convertFile);
-        mConvertFile.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                ProcessButton processButton = new ProcessButton();
-                processButton.execute(ServerAction.CONVERT_FILE);
-            }
-        });
-        mSaveFile = (Button)findViewById(R.id.saveFile);
-        mSaveFile.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                ProcessButton processButton = new ProcessButton();
-                processButton.execute(ServerAction.SAVE_FILE);
-            }
-        });
-        */
 
     }
 
@@ -239,9 +167,6 @@ public class MenuActivity extends AppCompatActivity {
         }
 
     }
-
-    /* Inner class to get response */
-
 
     @Override
     protected void onResume(){
