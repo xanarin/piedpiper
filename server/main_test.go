@@ -366,30 +366,6 @@ func TestCreateObjectValid(t *testing.T) {
 	}
 }
 
-func TestCreateObjectInvalidOwner(t *testing.T) {
-	// Create a request to pass to our handler.
-	createObjectJSON := CreateObjectRequestJSON{Token: "this is not a valid token!!", FileName: "bar.txt"}
-	buffer, err := json.Marshal(createObjectJSON)
-	req, err := http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// We create a ResponseRecorder (which satisfies http.ResponseWriter) to record the response.
-	rr := httptest.NewRecorder()
-	createObjectHandler := http.HandlerFunc(createObjectHandler)
-
-	// Our handlers satisfy http.Handler, so we can call their ServeHTTP method
-	// directly and pass in our Request and ResponseRecorder.
-	createObjectHandler.ServeHTTP(rr, req)
-
-	// Check the status code is what we expect.
-	if status := rr.Code; status != http.StatusNotFound {
-		t.Errorf("user creator handler returned wrong status code: got %v want %v",
-			status, http.StatusNotFound)
-	}
-}
-
 func TestCreateGetObjectWithoutUpload(t *testing.T) {
 	// Create user for this test
 	createUserJSON := UserCreationJSON{Username: "SetGetGuy", Password: "foobar"}

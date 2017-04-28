@@ -581,6 +581,7 @@ func authUserHandler(res http.ResponseWriter, req *http.Request) {
 	// At this point, user has been successfully authenticated. Generate a nonce and send it back.
 	// This simply creates a random byte array
 	var nonce [24]byte
+
 	lengthOfCHARS := int64(len(CHARS))
 	for i := 0; i < 24; i++ {
 		n, err := rand.Int(rand.Reader, big.NewInt(lengthOfCHARS))
@@ -598,7 +599,11 @@ func authUserHandler(res http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		log.Panicf("%v", err)
 	}
-	expDateString := time.Now().UTC().Add(timeDuration).Format("20060102150405")
+	timeOffset, err := time.ParseDuration("-1s")
+	if err != nil {
+		log.Panicf("%v", err)
+	}
+	expDateString := time.Now().UTC().Add(timeDuration).Add(timeOffset).Format("20060102150405")
 
 	responseJSON := AuthUserResponseJSON{
 		ExpirationDate: expDateString,
@@ -619,10 +624,12 @@ func authUserHandler(res http.ResponseWriter, req *http.Request) {
 	// Write token into database with user and timestamp for expiration
 
 	// Create hash
-	hashInput := []byte(userObject.Username)
-	hashInput = append(hashInput, nonce[:]...)
-	hashInput = append(hashInput, []byte(expDateString)...)
+	log.Printf("hashInput: '%v'", userObject.Username+string(nonce[:])+expDateString)
+	hashInput := []byte(userObject.Username + string(nonce[:]) + expDateString)
 	tokenBytes := sha512.Sum512(hashInput)
+	log.Printf("hashInput(text): '%v'", hex.EncodeToString(hashInput))
+
+	log.Printf("Token for user %v is: '%v'", userObject.Username, hex.EncodeToString(tokenBytes[:]))
 
 	token := Token{
 		Token:          tokenBytes[:],
