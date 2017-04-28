@@ -330,9 +330,22 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
             return true;
         }
 
+        public String bytesToHex(byte[] in) {
+            final StringBuilder builder = new StringBuilder();
+            for(byte b : in) {
+                builder.append(String.format("%02x", b));
+            }
+            return builder.toString();
+        }
+
         private String getHashCodeFromString(String str) throws NoSuchAlgorithmException {
+
+            byte[] bytes = str.getBytes();
+            bytes[bytes.length-1] =bytes[bytes.length-1]++;
+            Log.i("hash", bytesToHex(bytes));
+            Log.i("hash", str);
             MessageDigest md = MessageDigest.getInstance("SHA-512");
-            md.update(str.getBytes());
+            md.update(bytes);
             byte byteData[] = md.digest();
 
             //convert the byte to hex format method 1
