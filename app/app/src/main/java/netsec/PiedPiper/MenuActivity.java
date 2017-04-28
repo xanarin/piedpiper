@@ -101,13 +101,6 @@ public class MenuActivity extends AppCompatActivity {
 
         txt = (TextView) findViewById(R.id.text);
 
-        aesKey = SimpleCrypto.generateKey("Thisismypassword");
-        if (aesKey == null) {
-            Log.e("onCreate", "Unable to generate key");
-        }
-        plainText = "This is my plaintext".getBytes();
-        cipherText = "".getBytes();
-
         mUserButton = (Button)findViewById(R.id.user);
         mUserButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -128,6 +121,7 @@ public class MenuActivity extends AppCompatActivity {
         });
 
 
+        /*
         mEncryptButton = (Button)findViewById(R.id.encrypt);
         mEncryptButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -202,6 +196,7 @@ public class MenuActivity extends AppCompatActivity {
                 processButton.execute(ServerAction.SAVE_FILE);
             }
         });
+        */
 
     }
 
@@ -246,217 +241,7 @@ public class MenuActivity extends AppCompatActivity {
     }
 
     /* Inner class to get response */
-    class ProcessButton extends AsyncTask<ServerAction, Void, Void> {
 
-
-
-        private String createObject(String token, String filename) {
-            HttpURLConnection urlConnection=null;
-            String json = null;
-            String reply = null;
-            try {
-                SimpleDateFormat dateFormatGmt = new SimpleDateFormat("yyyyMMddHHmmss");
-                dateFormatGmt.setTimeZone(TimeZone.getTimeZone("GMT"));
-                Date now = new Date();
-
-                HttpResponse response;
-                JSONObject jsonObject = new JSONObject();
-                jsonObject.accumulate("username", token);
-                jsonObject.accumulate("filename", filename);
-                json = jsonObject.toString();
-                Log.i("getting:", json);
-                HttpClient httpClient = new DefaultHttpClient();
-                HttpPost httpPost = new HttpPost("https://pp.848.productions/object");
-                httpPost.setEntity(new StringEntity(json, "UTF-8"));
-                httpPost.setHeader("Content-Type", "application/json");
-                httpPost.setHeader("Accept-Encoding", "application/json");
-                httpPost.setHeader("Accept-Language", "en-US");
-                response = httpClient.execute(httpPost);
-                Log.i("response", response.getStatusLine().getReasonPhrase());
-
-                InputStream inputStream = response.getEntity().getContent();
-                StringifyStream str = new StringifyStream();
-                responseServer = str.getStringFromInputStream(inputStream);
-                objectID = responseServer;
-                Log.d("GetToken Server Reply", responseServer);
-                JSONObject replyJson = new JSONObject(responseServer);
-
-                Log.e("response", responseServer);
-
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            return "Device Token: " + objectID;
-        }
-
-        private int uploadObject(String objectID) {
-            HttpURLConnection urlConnection=null;
-            String json = null;
-            String reply = null;
-            int responseCode = 8888;
-
-            try {
-                HttpResponse response;
-                HttpClient httpClient = new DefaultHttpClient();
-                HttpPost httpPost = new HttpPost("https://pp.848.productions/object/" + objectID);
-                httpPost.setEntity(new ByteArrayEntity(cipherText));
-                httpPost.setHeader("Content-Type", "application/json");
-                httpPost.setHeader("Accept-Encoding", "application/json");
-                httpPost.setHeader("Accept-Language", "en-US");
-                response = httpClient.execute(httpPost);
-
-                responseCode = response.getStatusLine().getStatusCode();
-
-                Log.i("response", response.getStatusLine().getReasonPhrase());
-
-                InputStream inputStream = response.getEntity().getContent();
-                StringifyStream str = new StringifyStream();
-                responseServer = str.getStringFromInputStream(inputStream);
-                Log.d("GetToken Server Reply", responseServer);
-
-                Log.e("response", responseServer);
-                cipherText = "".getBytes();
-
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            return responseCode;
-        }
-
-        private String getObject(String username, String filename) {
-            HttpURLConnection urlConnection=null;
-            String json = null;
-            String reply = null;
-            try {
-                SimpleDateFormat dateFormatGmt = new SimpleDateFormat("yyyyMMddHHmmss");
-                dateFormatGmt.setTimeZone(TimeZone.getTimeZone("GMT"));
-                Date now = new Date();
-
-                HttpResponse response;
-                JSONObject jsonObject = new JSONObject();
-                jsonObject.accumulate("username", username);
-                jsonObject.accumulate("filename", filename);
-                json = jsonObject.toString();
-                Log.i("getting:", json);
-
-                HttpClient httpClient = new DefaultHttpClient();
-
-                HttpGetWithEntity  httpGet = new HttpGetWithEntity ("https://pp.848.productions/object");
-                httpGet.setEntity(new StringEntity(json, "UTF-8"));
-
-                response = httpClient.execute(httpGet);
-                Log.i("response", response.getStatusLine().getReasonPhrase());
-                cipherText = EntityUtils.toByteArray(response.getEntity());
-//                InputStream inputStream = response.getEntity().getContent();
-//                StringifyStream str = new StringifyStream();
-//                responseServer = str.getStringFromInputStream(inputStream);
-                responseServer = cipherText.toString();
-                Log.d("GetToken Server Reply", responseServer);
-                //JSONObject replyJson = new JSONObject(responseServer);
-                //token = getHashCodeFromString(username + replyJson.getString("Nonce") + jsonObject.getString("foo"));
-//                cipherText = responseServer.getBytes();
-                Log.e("response", responseServer);
-
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            return responseServer;
-        }
-
-        private String convertFile() {
-
-            final File file = new File(Environment.getExternalStorageDirectory().getAbsolutePath(), "file.txt");
-            int size = (int) file.length();
-            byte[] bytes = new byte[size];
-            try {
-                BufferedInputStream buf = new BufferedInputStream(new FileInputStream(file));
-                buf.read(bytes, 0, bytes.length);
-                buf.close();
-            } catch (FileNotFoundException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            plainText = bytes;
-            String rtn = new String();
-            return "";
-        }
-
-        private String saveFile() {
-
-            File file=new File(Environment.getExternalStorageDirectory(), "output.txt");
-            try {
-                file.createNewFile();
-            } catch (java.io.IOException e) {
-                Log.e("SaveFile", "Create new file", e);
-            }
-
-            try {
-                FileOutputStream fos=new FileOutputStream(file.getPath());
-                fos.write(plainText);
-                fos.close();
-            }
-            catch (java.io.IOException e) {
-                Log.e("saveFile", "Write to file", e);
-            }
-
-            return "saved";
-        }
-
-
-
-        @Override
-        protected Void doInBackground(ServerAction... params) {
-
-            Log.e("Entering doInBackground", params[0].name());
-
-            HttpURLConnection urlConnection=null;
-            String json = null;
-            ServerAction action = params[0];
-            String username = "user4321";
-            String password = "pass4321";
-            String filename = "sample14";
-            int res = 9999;
-
-            switch (action) {
-                /*
-                case USER_REGISTER:
-                    responseServer = userRegister(username, password);
-                    break;
-                case REQUEST_TOKEN:
-                    responseServer = requestToken(username, password);
-                    break;
-                    */
-                case CREATE_OBJECT:
-                    responseServer = createObject(username, filename);
-                    break;
-                case UPLOAD_OBJECT:
-                    res = uploadObject(objectID);
-                    responseServer = "CODE " + res;
-                    break;
-                case GET_OBJECT:
-                    responseServer = getObject(username, filename);
-                    break;
-                case CONVERT_FILE:
-                    responseServer = convertFile();
-                    break;
-                case SAVE_FILE:
-                    responseServer = saveFile();
-                    break;
-                default:
-                    responseServer = "Action not registered";
-            }
-
-            return null;
-        }
-
-        @Override
-        protected void onPostExecute(Void aVoid) {
-            super.onPostExecute(aVoid);
-
-            txt.setText(responseServer);
-        }
-    }
 
     @Override
     protected void onResume(){
