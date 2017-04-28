@@ -59,6 +59,7 @@ public class MenuActivity extends AppCompatActivity {
     private final String TAG = this.getClass().getSimpleName();
 
     private Button mUserButton;
+    private Button mFileButton;
 
     private Button mEncryptButton;
     private Button mDecryptButton;
@@ -116,6 +117,15 @@ public class MenuActivity extends AppCompatActivity {
             }
         });
 
+
+        mFileButton = (Button)findViewById(R.id.file);
+        mFileButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Intent toFile = new Intent(MenuActivity.this, FileActivity.class);
+                startActivity(toFile);
+            }
+        });
 
 
         mEncryptButton = (Button)findViewById(R.id.encrypt);

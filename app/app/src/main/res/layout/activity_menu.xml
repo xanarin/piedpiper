@@ -21,6 +21,13 @@
         android:text="Login/Register" />
 
     <android.support.v7.widget.AppCompatButton
+        android:id="@+id/file"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="File Operations" />
+
+    <android.support.v7.widget.AppCompatButton
         android:id="@+id/convertFile"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
