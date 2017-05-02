@@ -5,10 +5,12 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strconv"
 	"testing"
@@ -227,9 +229,8 @@ func TestPutGetObjectValid(t *testing.T) {
 	}
 
 	// Get object back from database
-	getObjectJSON := GetObjectRequestJSON{Token: sha, FileName: "rando239487246char.txt"}
-	buffer, err = json.Marshal(getObjectJSON)
-	req, err = http.NewRequest("GET", "/object", bytes.NewBuffer(buffer))
+	reqURL := fmt.Sprintf("/object?token=%v&filename=%v", sha, url.QueryEscape("rando239487246char.txt"))
+	req, err = http.NewRequest("GET", reqURL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -436,9 +437,8 @@ func TestCreateGetObjectWithoutUpload(t *testing.T) {
 	}
 
 	// Get object back from database
-	getObjectJSON := GetObjectRequestJSON{Token: tokenString, FileName: "rando239487246char.txt"}
-	buffer, err = json.Marshal(getObjectJSON)
-	req, err = http.NewRequest("GET", "/object", bytes.NewBuffer(buffer))
+	reqURL := fmt.Sprintf("/object?token=%v&filename=%v", tokenString, url.QueryEscape("rando239487246char.txt"))
+	req, err = http.NewRequest("GET", reqURL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -506,9 +506,8 @@ func TestCreateGetObjectBadFileName(t *testing.T) {
 	tokenString := hex.EncodeToString(hasher.Sum(nil))
 
 	// Get object back from database (but we're requesting an object that doesn't exist)
-	getObjectJSON := GetObjectRequestJSON{Token: tokenString, FileName: "11.txt"}
-	buffer, err = json.Marshal(getObjectJSON)
-	req, err = http.NewRequest("GET", "/object", bytes.NewBuffer(buffer))
+	reqURL := fmt.Sprintf("/object?token=%v&filename=%v", tokenString, url.QueryEscape("11.txt"))
+	req, err = http.NewRequest("GET", reqURL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
