@@ -188,10 +188,14 @@ public class FileActivity extends AppCompatActivity {
 
             try {
                 byte[] cipherText = getObject(_token, _fileNameDown);
+                Log.i("DownCipher", SimpleCrypto.bytesToHex(cipherText));
+                Log.i("DownLen", "" + cipherText.length);
+
                 Log.i("Downed","wo");
-                byte[] plainText = SimpleCrypto.decrypt(_aesKey, cipherText);
+                //byte[] plainText = SimpleCrypto.decrypt(_aesKey, cipherText);
                 Log.i("Decrypted","wo");
-                saveFile(plainText, _fileNameDown);
+                //saveFile(plainText, _fileNameDown);
+                saveFile(cipherText, _fileNameDown);
                 Log.i("Saved","wo");
             }
             catch (Exception e) {
@@ -318,7 +322,7 @@ public class FileActivity extends AppCompatActivity {
             //JSONObject replyJson = new JSONObject(responseServer);
             //token = getHashCodeFromString(username + replyJson.getString("Nonce") + jsonObject.getString("foo"));
 //                cipherText = responseServer.getBytes();
-            Log.e("response", responseServer);
+            Log.e("response", response.getStatusLine().getReasonPhrase());
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -349,7 +353,9 @@ public class FileActivity extends AppCompatActivity {
 
     private String saveFile(byte[] plainText, String filename) {
 
-        File file=new File(Environment.getExternalStorageDirectory(), filename);
+        Log.d("Outputdir", Environment.getExternalStorageDirectory().getAbsolutePath());
+        Log.d("plainLen", "" + plainText.length);
+        File file=new File(Environment.getExternalStorageDirectory(), "output.file");
         try {
             file.createNewFile();
         } catch (java.io.IOException e) {
