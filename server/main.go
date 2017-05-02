@@ -5,11 +5,13 @@ import (
 	"crypto/rand"
 	"crypto/sha512"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/big"
 	insecureRand "math/rand"
 	"net/http"
 	"os"
@@ -27,6 +29,10 @@ import (
 var MainDB *bolt.DB
 var DataPath string
 
+const (
+	CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
+)
+
 // API JSON objects
 type ErrorResponse struct {
 	Code        int    `json: "code"`
@@ -35,12 +41,12 @@ type ErrorResponse struct {
 }
 
 type GetObjectRequestJSON struct {
-	Token    []byte `json: "token"`
+	Token    string `json: "token"`
 	FileName string `json: "filename"`
 }
 
 type CreateObjectRequestJSON struct {
-	Token    []byte `json: "token"`
+	Token    string `json: "token"`
 	FileName string `json: "filename"`
 }
 
@@ -57,7 +63,7 @@ type AuthUserRequestJSON struct {
 
 type AuthUserResponseJSON struct {
 	ExpirationDate string `json: "expdate"`
-	Nonce          []byte `json: "nonce"`
+	Nonce          string `json: "nonce"`
 }
 
 // Internal use structs
@@ -92,13 +98,17 @@ func itob(v int) []byte {
 	return b
 }
 
-func checkToken(token []byte) (*Token, error) {
+func checkToken(token string) (*Token, error) {
 	// Find token in database, if it exists
 	var tokenData []byte
+	tokenBytes, err := hex.DecodeString(token)
+	if err != nil {
+		return nil, err
+	}
 
-	err := MainDB.View(func(tx *bolt.Tx) error {
+	err = MainDB.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("tokens"))
-		tokenData = b.Get(token)
+		tokenData = b.Get(tokenBytes)
 		return nil
 	})
 	if err != nil {
@@ -283,7 +293,6 @@ func createObjectHandler(res http.ResponseWriter, req *http.Request) {
 
 	// Create new object in database
 	// Create Random filename
-	CHARS := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
 	seed := insecureRand.NewSource(time.Now().UnixNano())
 	bag := insecureRand.New(seed)
 
@@ -572,18 +581,33 @@ func authUserHandler(res http.ResponseWriter, req *http.Request) {
 	// At this point, user has been successfully authenticated. Generate a nonce and send it back.
 	// This simply creates a random byte array
 	var nonce [24]byte
-	rand.Read(nonce[:])
+
+	lengthOfCHARS := int64(len(CHARS))
+	for i := 0; i < 24; i++ {
+		n, err := rand.Int(rand.Reader, big.NewInt(lengthOfCHARS))
+		if err != nil {
+			res.WriteHeader(http.StatusInternalServerError)
+			log.Printf("Error turning big/Int into int64: ", err)
+			return
+		}
+		nonce[i] = CHARS[int(n.Int64())]
+	}
+	log.Printf("Generated nonce: %v", string(nonce[:]))
 
 	// This is the life of the token
 	timeDuration, err := time.ParseDuration("144h")
 	if err != nil {
 		log.Panicf("%v", err)
 	}
-	expDateString := time.Now().UTC().Add(timeDuration).Format("20060102150405")
+	timeOffset, err := time.ParseDuration("-1s")
+	if err != nil {
+		log.Panicf("%v", err)
+	}
+	expDateString := time.Now().UTC().Add(timeDuration).Add(timeOffset).Format("20060102150405")
 
 	responseJSON := AuthUserResponseJSON{
 		ExpirationDate: expDateString,
-		Nonce:          nonce[:],
+		Nonce:          string(nonce[:]),
 	}
 
 	// Write response back to client
@@ -600,10 +624,12 @@ func authUserHandler(res http.ResponseWriter, req *http.Request) {
 	// Write token into database with user and timestamp for expiration
 
 	// Create hash
-	hashInput := []byte(userObject.Username)
-	hashInput = append(hashInput, nonce[:]...)
-	hashInput = append(hashInput, []byte(expDateString)...)
+	log.Printf("hashInput: '%v'", userObject.Username+string(nonce[:])+expDateString)
+	hashInput := []byte(userObject.Username + string(nonce[:]) + expDateString)
 	tokenBytes := sha512.Sum512(hashInput)
+	log.Printf("hashInput(text): '%v'", hex.EncodeToString(hashInput))
+
+	log.Printf("Token for user %v is: '%v'", userObject.Username, hex.EncodeToString(tokenBytes[:]))
 
 	token := Token{
 		Token:          tokenBytes[:],

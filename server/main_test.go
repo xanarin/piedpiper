@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/sha512"
+	"encoding/hex"
 	"encoding/json"
 	"io/ioutil"
 	"log"
@@ -184,10 +185,12 @@ func TestPutGetObjectValid(t *testing.T) {
 	hashInput := []byte("#TheRealUploader")
 	hashInput = append(hashInput, response.Nonce...)
 	hashInput = append(hashInput, []byte(response.ExpirationDate)...)
-	tokenBytes := sha512.Sum512(hashInput)
+	hasher := sha512.New()
+	hasher.Write(hashInput)
+	sha := hex.EncodeToString(hasher.Sum(nil))
 
 	// Create a new object in the database
-	createObjectJSON := CreateObjectRequestJSON{Token: tokenBytes[:], FileName: "rando239487246char.txt"}
+	createObjectJSON := CreateObjectRequestJSON{Token: sha, FileName: "rando239487246char.txt"}
 	buffer, err = json.Marshal(createObjectJSON)
 	req, err = http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
 	if err != nil {
@@ -224,7 +227,7 @@ func TestPutGetObjectValid(t *testing.T) {
 	}
 
 	// Get object back from database
-	getObjectJSON := GetObjectRequestJSON{Token: tokenBytes[:], FileName: "rando239487246char.txt"}
+	getObjectJSON := GetObjectRequestJSON{Token: sha, FileName: "rando239487246char.txt"}
 	buffer, err = json.Marshal(getObjectJSON)
 	req, err = http.NewRequest("GET", "/object", bytes.NewBuffer(buffer))
 	if err != nil {
@@ -327,10 +330,12 @@ func TestCreateObjectValid(t *testing.T) {
 	hashInput := []byte("happyUploader")
 	hashInput = append(hashInput, response.Nonce...)
 	hashInput = append(hashInput, []byte(response.ExpirationDate)...)
-	tokenBytes := sha512.Sum512(hashInput)
+	hasher := sha512.New()
+	hasher.Write(hashInput)
+	tokenString := hex.EncodeToString(hasher.Sum(nil))
 
 	// Create a request to pass to our handler.
-	createObjectJSON := CreateObjectRequestJSON{Token: tokenBytes[:], FileName: "foo.txt"}
+	createObjectJSON := CreateObjectRequestJSON{Token: tokenString, FileName: "foo.txt"}
 	buffer, err = json.Marshal(createObjectJSON)
 	req, err = http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
 	if err != nil {
@@ -358,30 +363,6 @@ func TestCreateObjectValid(t *testing.T) {
 	// Check the response body contains uploadSessionID
 	if rr.Body.String() == "" {
 		t.Errorf("handler returned empty body, wanted uploadSessionID")
-	}
-}
-
-func TestCreateObjectInvalidOwner(t *testing.T) {
-	// Create a request to pass to our handler.
-	createObjectJSON := CreateObjectRequestJSON{Token: []byte("this is not a valid token!!"), FileName: "bar.txt"}
-	buffer, err := json.Marshal(createObjectJSON)
-	req, err := http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// We create a ResponseRecorder (which satisfies http.ResponseWriter) to record the response.
-	rr := httptest.NewRecorder()
-	createObjectHandler := http.HandlerFunc(createObjectHandler)
-
-	// Our handlers satisfy http.Handler, so we can call their ServeHTTP method
-	// directly and pass in our Request and ResponseRecorder.
-	createObjectHandler.ServeHTTP(rr, req)
-
-	// Check the status code is what we expect.
-	if status := rr.Code; status != http.StatusNotFound {
-		t.Errorf("user creator handler returned wrong status code: got %v want %v",
-			status, http.StatusNotFound)
 	}
 }
 
@@ -433,10 +414,12 @@ func TestCreateGetObjectWithoutUpload(t *testing.T) {
 	hashInput := []byte("SetGetGuy")
 	hashInput = append(hashInput, response.Nonce...)
 	hashInput = append(hashInput, []byte(response.ExpirationDate)...)
-	tokenBytes := sha512.Sum512(hashInput)
+	hasher := sha512.New()
+	hasher.Write(hashInput)
+	tokenString := hex.EncodeToString(hasher.Sum(nil))
 
 	// Create a new object in the database
-	createObjectJSON := CreateObjectRequestJSON{Token: tokenBytes[:], FileName: "rando239487246char.txt"}
+	createObjectJSON := CreateObjectRequestJSON{Token: tokenString, FileName: "rando239487246char.txt"}
 	buffer, err = json.Marshal(createObjectJSON)
 	req, err = http.NewRequest("POST", "/object", bytes.NewBuffer(buffer))
 	if err != nil {
@@ -453,7 +436,7 @@ func TestCreateGetObjectWithoutUpload(t *testing.T) {
 	}
 
 	// Get object back from database
-	getObjectJSON := GetObjectRequestJSON{Token: tokenBytes[:], FileName: "rando239487246char.txt"}
+	getObjectJSON := GetObjectRequestJSON{Token: tokenString, FileName: "rando239487246char.txt"}
 	buffer, err = json.Marshal(getObjectJSON)
 	req, err = http.NewRequest("GET", "/object", bytes.NewBuffer(buffer))
 	if err != nil {
@@ -518,10 +501,12 @@ func TestCreateGetObjectBadFileName(t *testing.T) {
 	hashInput := []byte("BadOwner2")
 	hashInput = append(hashInput, response.Nonce...)
 	hashInput = append(hashInput, []byte(response.ExpirationDate)...)
-	tokenBytes := sha512.Sum512(hashInput)
+	hasher := sha512.New()
+	hasher.Write(hashInput)
+	tokenString := hex.EncodeToString(hasher.Sum(nil))
 
 	// Get object back from database (but we're requesting an object that doesn't exist)
-	getObjectJSON := GetObjectRequestJSON{Token: tokenBytes[:], FileName: "11.txt"}
+	getObjectJSON := GetObjectRequestJSON{Token: tokenString, FileName: "11.txt"}
 	buffer, err = json.Marshal(getObjectJSON)
 	req, err = http.NewRequest("GET", "/object", bytes.NewBuffer(buffer))
 	if err != nil {
