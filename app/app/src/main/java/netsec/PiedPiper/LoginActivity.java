@@ -312,7 +312,7 @@ public class LoginActivity extends AppCompatActivity implements LoaderCallbacks<
                 responseServer = str.getStringFromInputStream(inputStream);
                 Log.d("GetToken Server Reply", responseServer);
                 JSONObject replyJson = new JSONObject(responseServer);
-                token = getHashCodeFromString(username + replyJson.getString("Nonce") + jsonObject.getString("reqdate"));
+                token = getHashCodeFromString(username + replyJson.getString("Nonce") + replyJson.getString("ExpirationDate"));
 
                 sharedPreferences=getSharedPreferences(SHARED_PREF_FILE,0);
                 SharedPreferences.Editor editor=sharedPreferences.edit();

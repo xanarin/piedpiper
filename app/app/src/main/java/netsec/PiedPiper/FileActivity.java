@@ -160,6 +160,7 @@ public class FileActivity extends AppCompatActivity {
 
             //upload
             uploadObject(file_id, cipherText);
+            Log.i("UpCipher", SimpleCrypto.bytesToHex(cipherText));
             return null;
         }
 
@@ -236,7 +237,7 @@ public class FileActivity extends AppCompatActivity {
             MenuActivity.StringifyStream str = new MenuActivity.StringifyStream();
             responseServer = str.getStringFromInputStream(inputStream);
             Log.d("GetToken Server Reply", responseServer);
-            JSONObject replyJson = new JSONObject(responseServer);
+            //JSONObject replyJson = new JSONObject(responseServer);
 
             Log.e("response", responseServer);
 
@@ -322,6 +323,7 @@ public class FileActivity extends AppCompatActivity {
         } catch (Exception e) {
             e.printStackTrace();
         }
+        Log.i("DownCipher", SimpleCrypto.bytesToHex(cipherText));
         return cipherText;
     }
 
