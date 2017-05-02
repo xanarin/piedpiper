@@ -2,6 +2,7 @@ package netsec.PiedPiper;
 
 import android.content.DialogInterface;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
@@ -18,10 +19,12 @@ import android.widget.TextView;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.params.HttpParams;
 import org.apache.http.util.EntityUtils;
 import org.json.JSONObject;
 
@@ -132,6 +135,7 @@ public class FileActivity extends AppCompatActivity {
         mDownloadButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                _fileNameDown = _downloadSipnner.getSelectedItem().toString();
                 DownloadAsync downloadTask = new DownloadAsync();
                 downloadTask.execute();
             }
@@ -192,10 +196,10 @@ public class FileActivity extends AppCompatActivity {
                 Log.i("DownLen", "" + cipherText.length);
 
                 Log.i("Downed","wo");
-                //byte[] plainText = SimpleCrypto.decrypt(_aesKey, cipherText);
+                byte[] plainText = SimpleCrypto.decrypt(_aesKey, cipherText);
                 Log.i("Decrypted","wo");
-                //saveFile(plainText, _fileNameDown);
-                saveFile(cipherText, _fileNameDown);
+                saveFile(plainText, _fileNameDown);
+                //saveFile(cipherText, _fileNameDown);
                 Log.i("Saved","wo");
             }
             catch (Exception e) {
@@ -306,10 +310,18 @@ public class FileActivity extends AppCompatActivity {
             json = jsonObject.toString();
             Log.i("getting:", json);
 
+            Uri uri = new Uri.Builder()
+                    .scheme("https")
+                    .authority("pp.848.productions")
+                    .path("object")
+                    .appendQueryParameter("token", token)
+                    .appendQueryParameter("filename", filename)
+                    .build();
             HttpClient httpClient = new DefaultHttpClient();
 
-            HttpGetWithEntity  httpGet = new HttpGetWithEntity ("https://pp.848.productions/object");
-            httpGet.setEntity(new StringEntity(json, "UTF-8"));
+            HttpGet httpGet = new HttpGet (uri.toString());
+            Log.i("url", httpGet.getURI().toASCIIString());
+            Log.i("url", uri.toString());
 
             response = httpClient.execute(httpGet);
             Log.i("response", response.getStatusLine().getReasonPhrase());
@@ -355,7 +367,7 @@ public class FileActivity extends AppCompatActivity {
 
         Log.d("Outputdir", Environment.getExternalStorageDirectory().getAbsolutePath());
         Log.d("plainLen", "" + plainText.length);
-        File file=new File(Environment.getExternalStorageDirectory(), "output.file");
+        File file=new File(Environment.getExternalStorageDirectory(), filename);
         try {
             file.createNewFile();
         } catch (java.io.IOException e) {
