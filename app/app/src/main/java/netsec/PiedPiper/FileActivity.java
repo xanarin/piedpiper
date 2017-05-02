@@ -152,7 +152,15 @@ public class FileActivity extends AppCompatActivity {
             byte[] cipherText = {};
             try {
                 File fi = new  File(_fullPath);
-                cipherText = SimpleCrypto.encrypt(_aesKey, read(fi));
+                byte[] pt1 = read(fi);
+                cipherText = SimpleCrypto.encrypt(_aesKey, pt1);
+                byte[] pt2 = SimpleCrypto.decrypt(_aesKey,cipherText);
+                for (int i=1; i<pt1.length; i++) {
+                    if (pt1[i] != pt2[i]) {
+                        Log.e("Encrypt", "failed sanity check");
+                    }
+                }
+
                 Log.i("Encrypted","wo");
             }
             catch (Exception e) {
@@ -164,6 +172,7 @@ public class FileActivity extends AppCompatActivity {
 
             //upload
             uploadObject(file_id, cipherText);
+            Log.i("UpCipher", ""+cipherText.length);
             Log.i("UpCipher", SimpleCrypto.bytesToHex(cipherText));
             return null;
         }
@@ -268,9 +277,9 @@ public class FileActivity extends AppCompatActivity {
             HttpClient httpClient = new DefaultHttpClient();
             HttpPost httpPost = new HttpPost("https://pp.848.productions/object/" + objectID);
             httpPost.setEntity(new ByteArrayEntity(cipherText));
-            httpPost.setHeader("Content-Type", "application/json");
-            httpPost.setHeader("Accept-Encoding", "application/json");
-            httpPost.setHeader("Accept-Language", "en-US");
+            httpPost.setHeader("Content-Type", "application/octet-stream");
+            //httpPost.setHeader("Accept-Encoding", "application/json");
+            //httpPost.setHeader("Accept-Language", "en-US");
             response = httpClient.execute(httpPost);
 
             responseCode = response.getStatusLine().getStatusCode();
@@ -292,24 +301,9 @@ public class FileActivity extends AppCompatActivity {
     }
 
     private byte[] getObject(String token, String filename) {
-        String responseServer = "";
-
-        HttpURLConnection urlConnection=null;
-        String json = null;
-        String reply = null;
         byte[] cipherText = null;
         try {
-            SimpleDateFormat dateFormatGmt = new SimpleDateFormat("yyyyMMddHHmmss");
-            dateFormatGmt.setTimeZone(TimeZone.getTimeZone("GMT"));
-            Date now = new Date();
-
             HttpResponse response;
-            JSONObject jsonObject = new JSONObject();
-            jsonObject.accumulate("token", token);
-            jsonObject.accumulate("filename", filename);
-            json = jsonObject.toString();
-            Log.i("getting:", json);
-
             Uri uri = new Uri.Builder()
                     .scheme("https")
                     .authority("pp.848.productions")
@@ -317,50 +311,20 @@ public class FileActivity extends AppCompatActivity {
                     .appendQueryParameter("token", token)
                     .appendQueryParameter("filename", filename)
                     .build();
-            HttpClient httpClient = new DefaultHttpClient();
-
-            HttpGet httpGet = new HttpGet (uri.toString());
-            Log.i("url", httpGet.getURI().toASCIIString());
             Log.i("url", uri.toString());
 
+            HttpClient httpClient = new DefaultHttpClient();
+            HttpGet httpGet = new HttpGet (uri.toString());
+            httpGet.setHeader("Accept-Encoding", "application/octet-stream");
             response = httpClient.execute(httpGet);
-            Log.i("response", response.getStatusLine().getReasonPhrase());
             cipherText = EntityUtils.toByteArray(response.getEntity());
-//                InputStream inputStream = response.getEntity().getContent();
-//                StringifyStream str = new StringifyStream();
-//                responseServer = str.getStringFromInputStream(inputStream);
-            responseServer = cipherText.toString();
-            Log.d("GetToken Server Reply", responseServer);
-            //JSONObject replyJson = new JSONObject(responseServer);
-            //token = getHashCodeFromString(username + replyJson.getString("Nonce") + jsonObject.getString("foo"));
-//                cipherText = responseServer.getBytes();
             Log.e("response", response.getStatusLine().getReasonPhrase());
 
         } catch (Exception e) {
             e.printStackTrace();
         }
-        Log.i("DownCipher", SimpleCrypto.bytesToHex(cipherText));
+        Log.i("DownCip", SimpleCrypto.bytesToHex(cipherText));
         return cipherText;
-    }
-
-    private String convertFile() {
-
-        String responseServer = "";
-
-        final File file = new File(Environment.getExternalStorageDirectory().getAbsolutePath(), "file.txt");
-        int size = (int) file.length();
-        byte[] bytes = new byte[size];
-        try {
-            BufferedInputStream buf = new BufferedInputStream(new FileInputStream(file));
-            buf.read(bytes, 0, bytes.length);
-            buf.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        //TODO VVV
-        //plainText = bytes;
-        String rtn = new String();
-        return responseServer;
     }
 
     private String saveFile(byte[] plainText, String filename) {
