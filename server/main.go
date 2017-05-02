@@ -215,7 +215,6 @@ func getObjectHandler(res http.ResponseWriter, req *http.Request) {
 
 			if object.Name == requestJSON.FileName {
 				finalObject = &object
-				return nil
 			}
 		}
 		return nil
