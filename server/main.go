@@ -14,6 +14,7 @@ import (
 	"math/big"
 	insecureRand "math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"strconv"
@@ -145,16 +146,38 @@ func checkTokenExpired(token Token) bool {
 }
 
 func getObjectHandler(res http.ResponseWriter, req *http.Request) {
-	requestJSON := GetObjectRequestJSON{}
-	err := json.NewDecoder(req.Body).Decode(&requestJSON)
+	// Decode Parameters from URL
+	queryParams := req.URL.Query()
+
+	// Check to ensure that correct parameters exist
+	if len(queryParams["token"]) == 0 || len(queryParams["filename"]) == 0 {
+		res.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(res, "Error in decoding url parameters")
+		return
+	}
+
+	requestToken, err := url.QueryUnescape(queryParams["token"][0])
 	if err != nil {
 		res.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(res, "Error in decoding message")
+		fmt.Fprintf(res, "Parameter 'token' was not URL encoded properly")
+		return
+	}
+
+	requestFileName, err := url.QueryUnescape(queryParams["filename"][0])
+	if err != nil {
+		res.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(res, "Parameter 'filename' was not URL encoded properly")
+		return
+	}
+
+	if requestToken == "" || requestFileName == "" {
+		res.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(res, "Error in decoding url parameters")
 		return
 	}
 
 	// Check and validate token
-	token, err := checkToken(requestJSON.Token)
+	token, err := checkToken(requestToken)
 	if err != nil {
 		res.WriteHeader(http.StatusInternalServerError)
 		log.Printf("Error retrieving token from datastore: %v", err)
@@ -162,9 +185,9 @@ func getObjectHandler(res http.ResponseWriter, req *http.Request) {
 	}
 
 	if token == nil {
-		log.Printf("Tried to use invalid token: %s", requestJSON.Token)
+		log.Printf("Tried to use invalid token: %s", requestToken)
 		res.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(res, "Token '%v' is not a valid token", requestJSON.Token)
+		fmt.Fprintf(res, "Token '%v' is not a valid token", requestToken)
 		return
 	}
 
@@ -213,9 +236,8 @@ func getObjectHandler(res http.ResponseWriter, req *http.Request) {
 				return err
 			}
 
-			if object.Name == requestJSON.FileName {
+			if object.Name == requestFileName {
 				finalObject = &object
-				return nil
 			}
 		}
 		return nil
@@ -229,7 +251,7 @@ func getObjectHandler(res http.ResponseWriter, req *http.Request) {
 
 	if finalObject == nil {
 		res.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(res, "Failed to find object with filename %v belonging to user %v", requestJSON.FileName, ownerObject.Username)
+		fmt.Fprintf(res, "Failed to find object with filename %v belonging to user %v", requestFileName, ownerObject.Username)
 		return
 	}
 
@@ -241,6 +263,7 @@ func getObjectHandler(res http.ResponseWriter, req *http.Request) {
 		fmt.Fprintf(res, "Object was never uploaded, only created")
 		return
 	}
+
 	http.ServeFile(res, req, filepath)
 	log.Printf("Object %v has been GOTten", finalObject.ID)
 }
